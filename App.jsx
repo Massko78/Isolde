@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users } from "lucide-react";
+import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 
@@ -23,7 +23,7 @@ function WaxSeal({ letter, color, size = 36 }) {
   );
 }
 
-function TopNav({ view, setView, session, profile, darkMode, setDarkMode }) {
+function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWrite }) {
   const items = [
     { key: "home", label: "Découvrir", icon: BookOpen },
     { key: "write", label: "Écrire", icon: PenLine },
@@ -49,7 +49,7 @@ function TopNav({ view, setView, session, profile, darkMode, setDarkMode }) {
             return (
               <button
                 key={key}
-                onClick={() => setView(key)}
+                onClick={() => (key === "write" ? goToWrite() : setView(key))}
                 className="flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full text-sm font-ui transition-colors"
                 style={{
                   color: active ? "var(--paper-warm)" : "var(--ink)",
@@ -968,7 +968,7 @@ function AuthView({ onSuccess }) {
   );
 }
 
-function WriteView({ session, profile, collections, goToAuth, onPublished }) {
+function WriteView({ session, profile, collections, editingDraft, goToAuth, onPublished, onSavedDraft }) {
   const myCollections = (collections || []).filter((c) => c.author_id === session?.user?.id);
 
   const [target, setTarget] = useState("new"); // "new" | "existing"
@@ -982,9 +982,35 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const handlePublish = async () => {
+  useEffect(() => {
+    if (editingDraft) {
+      setPoemTitle(editingDraft.title);
+      setText(editingDraft.content);
+      setImage(editingDraft.image_url || "");
+    }
+  }, [editingDraft]);
+
+  const handleSave = async (status) => {
     setSubmitting(true);
     setErrorMsg("");
+
+    if (editingDraft) {
+      const { error } = await supabase
+        .from("poems")
+        .update({ title: poemTitle.trim(), content: text, image_url: image.trim() || null, status })
+        .eq("id", editingDraft.id);
+      setSubmitting(false);
+      if (error) {
+        setErrorMsg("La mise à jour a échoué. Réessaie.");
+        return;
+      }
+      if (status === "published") {
+        if (onPublished) await onPublished();
+      } else if (onSavedDraft) {
+        await onSavedDraft();
+      }
+      return;
+    }
 
     let collectionId = existingId;
 
@@ -1023,6 +1049,7 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
       content: text,
       image_url: image.trim() || null,
       position,
+      status,
     });
 
     setSubmitting(false);
@@ -1032,7 +1059,11 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
       return;
     }
 
-    if (onPublished) await onPublished();
+    if (status === "published") {
+      if (onPublished) await onPublished();
+    } else if (onSavedDraft) {
+      await onSavedDraft();
+    }
   };
 
   if (!session) {
@@ -1061,14 +1092,20 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
   return (
     <div className="max-w-2xl mx-auto px-6 py-12 view-enter">
       <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
-        Nouveau recueil
+        {editingDraft ? "Brouillon" : "Nouveau recueil"}
       </p>
-      <h1 className="font-display italic text-3xl mb-10" style={{ color: "var(--ink)" }}>
-        Écrire quelque chose
+      <h1 className="font-display italic text-3xl mb-2" style={{ color: "var(--ink)" }}>
+        {editingDraft ? "Continuer ce poème" : "Écrire quelque chose"}
       </h1>
+      {editingDraft && (
+        <p className="font-ui text-sm mb-8" style={{ color: "var(--ink-light)" }}>
+          Dans le recueil « {editingDraft.collection?.title} »
+        </p>
+      )}
+      {!editingDraft && <div className="mb-10" />}
 
       <div className="flex flex-col gap-6">
-        {myCollections.length > 0 && (
+        {!editingDraft && myCollections.length > 0 && (
           <div className="flex items-center gap-2 p-1 rounded-full border self-start" style={{ borderColor: "var(--rule)" }}>
             <button
               onClick={() => setTarget("new")}
@@ -1093,7 +1130,7 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
           </div>
         )}
 
-        {target === "existing" && myCollections.length > 0 && (
+        {!editingDraft && target === "existing" && myCollections.length > 0 && (
           <label className="flex flex-col gap-2">
             <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
               Recueil
@@ -1113,7 +1150,7 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
           </label>
         )}
 
-        {target === "new" && (
+        {!editingDraft && target === "new" && (
           <>
             <label className="flex flex-col gap-2">
               <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
@@ -1189,7 +1226,7 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
           )}
         </label>
 
-        {target === "new" && (
+        {!editingDraft && target === "new" && (
           <label className="flex items-center gap-2 font-ui text-sm cursor-pointer" style={{ color: "var(--ink-light)" }}>
             <input
               type="checkbox"
@@ -1205,10 +1242,19 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
           </label>
         )}
 
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex items-center gap-3 pt-2 flex-wrap">
           <button
-            onClick={handlePublish}
-            disabled={(target === "new" && !title.trim()) || !poemTitle.trim() || !text.trim() || submitting}
+            onClick={() => handleSave("draft")}
+            disabled={(!editingDraft && target === "new" && !title.trim()) || !poemTitle.trim() || !text.trim() || submitting}
+            className="flex items-center gap-2 font-ui text-sm px-6 py-3 rounded-full border disabled:opacity-30 transition-opacity"
+            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+          >
+            <FileEdit size={14} />
+            {submitting ? "..." : editingDraft ? "Enregistrer le brouillon" : "Enregistrer comme brouillon"}
+          </button>
+          <button
+            onClick={() => handleSave("published")}
+            disabled={(!editingDraft && target === "new" && !title.trim()) || !poemTitle.trim() || !text.trim() || submitting}
             className="font-ui text-sm px-6 py-3 rounded-full disabled:opacity-30 transition-opacity"
             style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
           >
@@ -1225,7 +1271,7 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
   );
 }
 
-function ProfileView({ collections, openCollection, session, profile, setProfile, goToAuth }) {
+function ProfileView({ collections, draftPoems, openCollection, session, profile, setProfile, goToAuth, editDraft, onWrite }) {
   const [editing, setEditing] = useState(false);
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -1273,6 +1319,7 @@ function ProfileView({ collections, openCollection, session, profile, setProfile
   }
 
   const mine = collections.filter((c) => c.author_id === session.user.id);
+  const myDrafts = (draftPoems || []).filter((d) => d.collection?.author_id === session.user.id);
 
   const handleSave = async () => {
     setSaving(true);
@@ -1426,6 +1473,37 @@ function ProfileView({ collections, openCollection, session, profile, setProfile
           ))}
         </div>
       )}
+
+      {myDrafts.length > 0 && (
+        <>
+          <p className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] mb-4 mt-10" style={{ color: "var(--sage)" }}>
+            <FileEdit size={13} />
+            Brouillons
+          </p>
+          <div className="flex flex-col gap-3">
+            {myDrafts.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => editDraft(d)}
+                className="flex items-center justify-between p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
+                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+              >
+                <div>
+                  <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
+                    {d.title || "Sans titre"}
+                  </p>
+                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                    {d.collection?.title}
+                  </p>
+                </div>
+                <span className="font-ui text-xs px-3 py-1.5 rounded-full border" style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}>
+                  Continuer
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1457,6 +1535,57 @@ function SideSnow() {
           }}
         />
       ))}
+    </div>
+  );
+}
+
+function SideRain() {
+  const drops = Array.from({ length: 14 }, (_, i) => ({
+    side: i % 2 === 0 ? "left" : "right",
+    offset: 1 + ((i * 3) % 9),
+    length: 12 + (i % 3) * 6,
+    duration: 0.9 + (i % 4) * 0.25,
+    delay: -(i * 0.4),
+    opacity: 0.12 + (i % 3) * 0.06,
+  }));
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
+      {drops.map((d, i) => (
+        <div
+          key={i}
+          className="absolute"
+          style={{
+            [d.side]: `${d.offset}%`,
+            top: "-8%",
+            width: 1.5,
+            height: d.length,
+            borderRadius: 2,
+            background: "var(--ink-light)",
+            opacity: d.opacity,
+            transform: "rotate(10deg)",
+            animation: `rainfall ${d.duration}s linear infinite`,
+            animationDelay: `${d.delay}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SideSun() {
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
+      <div
+        className="absolute rounded-full"
+        style={{
+          top: "-12%",
+          right: "-8%",
+          width: 360,
+          height: 360,
+          background: "radial-gradient(circle, rgba(255,214,140,0.28), transparent 70%)",
+          filter: "blur(10px)",
+        }}
+      />
     </div>
   );
 }
@@ -1881,12 +2010,41 @@ export default function App() {
   const [collection, setCollection] = useState(null);
   const [poemIndex, setPoemIndex] = useState(0);
   const [topLiked, setTopLiked] = useState([]);
+  const [draftPoems, setDraftPoems] = useState([]);
+  const [editingDraft, setEditingDraft] = useState(null);
   const [authorId, setAuthorId] = useState(null);
 
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("dark_mode") === "1");
   useEffect(() => {
     localStorage.setItem("dark_mode", darkMode ? "1" : "0");
   }, [darkMode]);
+
+  const [weather, setWeather] = useState(null); // "snow" | "rain" | "sun" | null
+  useEffect(() => {
+    const fetchWeather = (lat, lon) => {
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`)
+        .then((res) => res.json())
+        .then((data) => {
+          const code = data?.current_weather?.weathercode;
+          if (code === undefined) return;
+          if ([71, 73, 75, 77, 85, 86].includes(code)) setWeather("snow");
+          else if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(code)) setWeather("rain");
+          else if ([0, 1].includes(code)) setWeather("sun");
+          else setWeather(null);
+        })
+        .catch(() => {});
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
+        () => fetchWeather(48.86, 2.35), // fallback: Paris
+        { timeout: 4000 }
+      );
+    } else {
+      fetchWeather(48.86, 2.35);
+    }
+  }, []);
 
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -1924,14 +2082,24 @@ export default function App() {
 
     if (colsError || poemsError || !cols || !poems) return;
 
-    const shaped = cols.map((c) => ({
-      ...c,
-      sealColor: c.seal_color,
-      poems: poems
-        .filter((p) => p.collection_id === c.id)
-        .map((p) => ({ ...p, lines: p.content.split("\n") })),
-    }));
+    const shaped = cols
+      .map((c) => ({
+        ...c,
+        sealColor: c.seal_color,
+        poems: poems
+          .filter((p) => p.collection_id === c.id && p.status === "published")
+          .map((p) => ({ ...p, lines: p.content.split("\n") })),
+      }))
+      .filter((c) => c.poems.length > 0);
     setCollections(shaped);
+
+    const drafts = poems
+      .filter((p) => p.status === "draft")
+      .map((p) => {
+        const col = cols.find((c) => c.id === p.collection_id);
+        return { ...p, lines: p.content.split("\n"), collection: col };
+      });
+    setDraftPoems(drafts);
 
     const allPoems = shaped.flatMap((c) => c.poems.map((p) => ({ ...p, collection: c })));
     const top = [...allPoems]
@@ -1977,6 +2145,11 @@ export default function App() {
     setView("author");
   };
 
+  const editDraft = (draft) => {
+    setEditingDraft(draft);
+    setView("write");
+  };
+
   const palette = darkMode
     ? {
         "--paper": "#1E2230",
@@ -2017,6 +2190,10 @@ export default function App() {
           0% { transform: translateY(-6vh); }
           100% { transform: translateY(106vh); }
         }
+        @keyframes rainfall {
+          0% { transform: translateY(-10vh) rotate(10deg); }
+          100% { transform: translateY(110vh) rotate(10deg); }
+        }
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(6px); }
           to { opacity: 1; transform: translateY(0); }
@@ -2024,10 +2201,12 @@ export default function App() {
         .view-enter { animation: fadeIn 0.35s ease-out; }
       `}</style>
 
-      <SideSnow />
+      {weather === "snow" && <SideSnow />}
+      {weather === "rain" && <SideRain />}
+      {weather === "sun" && <SideSun />}
 
       <div className="relative" style={{ zIndex: 1 }}>
-        <TopNav view={view} setView={setView} session={session} profile={profile} darkMode={darkMode} setDarkMode={setDarkMode} />
+        <TopNav view={view} setView={setView} session={session} profile={profile} darkMode={darkMode} setDarkMode={setDarkMode} goToWrite={() => { setEditingDraft(null); setView("write"); }} />
 
         {view === "home" && <HomeView collections={collections} topLiked={topLiked} openCollection={openCollection} goToAuthor={goToAuthor} />}
         {view === "reader" && collection && (
@@ -2048,18 +2227,34 @@ export default function App() {
             session={session}
             profile={profile}
             collections={collections}
+            editingDraft={editingDraft}
             goToAuth={() => setView("auth")}
-            onPublished={async () => { await loadCollections(); setView("home"); }}
+            onPublished={async () => {
+              setEditingDraft(null);
+              await loadCollections();
+              setView("home");
+            }}
+            onSavedDraft={async () => {
+              setEditingDraft(null);
+              await loadCollections();
+              setView("profile");
+            }}
           />
         )}
         {view === "profile" && (
           <ProfileView
             collections={collections}
+            draftPoems={draftPoems}
             openCollection={openCollection}
             session={session}
             profile={profile}
             setProfile={setProfile}
             goToAuth={() => setView("auth")}
+            editDraft={editDraft}
+            onWrite={() => {
+              setEditingDraft(null);
+              setView("write");
+            }}
           />
         )}
         {view === "auth" && (
