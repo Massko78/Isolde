@@ -2,6 +2,17 @@ import { useState, useEffect, useRef } from "react";
 import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit, Upload } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
+// Stable identifier used for the like system, even for visitors without an account
+function getVoterId(session) {
+  if (session?.user?.id) return session.user.id;
+  let id = localStorage.getItem("anon_voter_id");
+  if (!id) {
+    id = "anon-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem("anon_voter_id", id);
+  }
+  return id;
+}
+
 
 function WaxSeal({ letter, color, size = 36 }) {
   return (
@@ -476,20 +487,31 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
   // Reset/load per-poem state whenever the displayed poem changes
   useEffect(() => {
     setLikesCount(poem.likes_count);
-    setLiked(localStorage.getItem(`liked_${poem.id}`) === "1");
     setShareCopied(false);
     setPoemReported(false);
     setCommentError("");
 
+    const voterId = getVoterId(session);
     let active = true;
+
     supabase
       .from("comments")
       .select("*")
       .eq("poem_id", poem.id)
       .order("created_at", { ascending: true })
-      .then(({ data, error }) => {
-        if (active && !error && data) setComments(data);
+      .then(async ({ data, error }) => {
+        if (!active || error || !data) return;
+        const authorIds = [...new Set(data.map((c) => c.author_id).filter(Boolean))];
+        let avatarMap = {};
+        if (authorIds.length > 0) {
+          const { data: profs } = await supabase.from("profiles").select("id, avatar_url").in("id", authorIds);
+          (profs || []).forEach((p) => {
+            avatarMap[p.id] = p.avatar_url;
+          });
+        }
+        if (active) setComments(data.map((c) => ({ ...c, authorAvatar: c.author_id ? avatarMap[c.author_id] : null })));
       });
+
     supabase
       .from("ratings")
       .select("*")
@@ -497,6 +519,15 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
       .then(({ data, error }) => {
         if (active && !error && data) setRatings(data);
       });
+
+    supabase
+      .from("likes")
+      .select("voter_id")
+      .eq("poem_id", poem.id)
+      .then(({ data, error }) => {
+        if (active && !error && data) setLiked(data.some((r) => r.voter_id === voterId));
+      });
+
     return () => {
       active = false;
     };
@@ -522,15 +553,15 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
   };
 
   const toggleLike = async () => {
+    const voterId = getVoterId(session);
     const next = !liked;
-    const delta = next ? 1 : -1;
     setLiked(next);
-    setLikesCount((c) => c + delta);
-    localStorage.setItem(`liked_${poem.id}`, next ? "1" : "0");
-    await supabase
-      .from("poems")
-      .update({ likes_count: likesCount + delta })
-      .eq("id", poem.id);
+    setLikesCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    if (next) {
+      await supabase.from("likes").insert({ poem_id: poem.id, voter_id: voterId });
+    } else {
+      await supabase.from("likes").delete().eq("poem_id", poem.id).eq("voter_id", voterId);
+    }
   };
 
   const handleShare = async () => {
@@ -601,13 +632,14 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
     setCommentError("");
     const newComment = {
       poem_id: poem.id,
-      author: commentAnon ? null : "Vous",
+      author: commentAnon ? null : profile?.username || "Anonyme",
+      author_id: commentAnon ? null : session?.user?.id || null,
       anonymous: commentAnon,
       content: draft.trim(),
     };
     const { data, error } = await supabase.from("comments").insert(newComment).select().single();
     if (!error && data) {
-      setComments((prev) => [...prev, data]);
+      setComments((prev) => [...prev, { ...data, authorAvatar: commentAnon ? null : profile?.avatar_url }]);
       setDraft("");
       localStorage.setItem("last_comment_time", String(Date.now()));
     }
@@ -950,8 +982,9 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
             <div className="flex flex-col gap-4 mb-6">
               {comments.map((c) => (
                 <div key={c.id} className="flex gap-3 group">
-                  <WaxSeal
-                    letter={c.anonymous ? "?" : c.author.charAt(0)}
+                  <AuthorBadge
+                    avatarUrl={c.anonymous ? null : c.authorAvatar}
+                    letter={c.anonymous ? "?" : (c.author || "?").charAt(0)}
                     color={c.anonymous ? "var(--ink-light)" : "var(--sage)"}
                     size={28}
                   />
