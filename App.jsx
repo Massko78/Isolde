@@ -2021,29 +2021,8 @@ export default function App() {
 
   const [weather, setWeather] = useState(null); // "snow" | "rain" | "sun" | null
   useEffect(() => {
-    const fetchWeather = (lat, lon) => {
-      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`)
-        .then((res) => res.json())
-        .then((data) => {
-          const code = data?.current_weather?.weathercode;
-          if (code === undefined) return;
-          if ([71, 73, 75, 77, 85, 86].includes(code)) setWeather("snow");
-          else if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(code)) setWeather("rain");
-          else if ([0, 1].includes(code)) setWeather("sun");
-          else setWeather(null);
-        })
-        .catch(() => {});
-    };
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
-        () => fetchWeather(48.86, 2.35), // fallback: Paris
-        { timeout: 4000 }
-      );
-    } else {
-      fetchWeather(48.86, 2.35);
-    }
+    const options = ["snow", "rain", "sun", null];
+    setWeather(options[Math.floor(Math.random() * options.length)]);
   }, []);
 
   const [session, setSession] = useState(null);
