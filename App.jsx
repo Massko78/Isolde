@@ -66,7 +66,7 @@ function TopNav({ view, setView }) {
   );
 }
 
-function HomeView({ collections, openCollection }) {
+function HomeView({ collections, topLiked, openCollection }) {
   if (collections.length === 0) {
     return (
       <div className="max-w-5xl mx-auto px-6 py-24 text-center">
@@ -112,6 +112,47 @@ function HomeView({ collections, openCollection }) {
           </button>
         </div>
       </section>
+
+      {/* Top liked poems */}
+      {topLiked.length > 0 && (
+        <section className="py-14 border-b" style={{ borderColor: "var(--rule)" }}>
+          <div className="flex items-baseline justify-between mb-8">
+            <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+              Les plus aimés
+            </h2>
+            <Heart size={14} style={{ color: "var(--wine)" }} fill="var(--wine)" />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-5">
+            {topLiked.map((p) => {
+              const idx = p.collection.poems.findIndex((x) => x.id === p.id);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => openCollection(p.collection, idx)}
+                  className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm flex items-center justify-between gap-4"
+                  style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+                >
+                  <div className="flex items-center gap-4">
+                    <WaxSeal letter={p.collection.seal} color={p.collection.sealColor} />
+                    <div>
+                      <h3 className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
+                        {p.title}
+                      </h3>
+                      <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                        {p.collection.title} · {p.collection.author}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="flex items-center gap-1.5 font-mono text-xs shrink-0" style={{ color: "var(--wine)" }}>
+                    <Heart size={13} fill="var(--wine)" />
+                    {p.likes_count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Collections grid */}
       <section className="py-14">
@@ -652,11 +693,13 @@ export default function App() {
   const [collection, setCollection] = useState(null);
   const [poemIndex, setPoemIndex] = useState(0);
 
+  const [topLiked, setTopLiked] = useState([]);
+
   const loadCollections = async () => {
     const { data: cols, error: colsError } = await supabase
       .from("collections")
       .select("*")
-      .order("id");
+      .order("created_at", { ascending: false });
     const { data: poems, error: poemsError } = await supabase
       .from("poems")
       .select("*")
@@ -672,6 +715,13 @@ export default function App() {
         .map((p) => ({ ...p, lines: p.content.split("\n") })),
     }));
     setCollections(shaped);
+
+    const allPoems = shaped.flatMap((c) => c.poems.map((p) => ({ ...p, collection: c })));
+    const top = [...allPoems]
+      .filter((p) => p.likes_count > 0)
+      .sort((a, b) => b.likes_count - a.likes_count)
+      .slice(0, 4);
+    setTopLiked(top);
   };
 
   useEffect(() => {
@@ -709,7 +759,7 @@ export default function App() {
 
       <TopNav view={view} setView={setView} />
 
-      {view === "home" && <HomeView collections={collections} openCollection={openCollection} />}
+      {view === "home" && <HomeView collections={collections} topLiked={topLiked} openCollection={openCollection} />}
       {view === "reader" && collection && (
         <ReaderView
           collection={collection}
