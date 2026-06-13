@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X } from "lucide-react";
+import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 
@@ -23,11 +23,13 @@ function WaxSeal({ letter, color, size = 36 }) {
   );
 }
 
-function TopNav({ view, setView, session, profile }) {
+function TopNav({ view, setView, session, profile, darkMode, setDarkMode }) {
   const items = [
     { key: "home", label: "Découvrir", icon: BookOpen },
     { key: "write", label: "Écrire", icon: PenLine },
   ];
+  if (session) items.push({ key: "following", label: "Abonnements", icon: Users });
+
   return (
     <header
       className="sticky top-0 z-10 border-b"
@@ -74,6 +76,15 @@ function TopNav({ view, setView, session, profile }) {
             </button>
           )}
 
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            title={darkMode ? "Passer au thème clair" : "Passer au thème sombre"}
+            className="flex items-center px-2.5 py-2 rounded-full transition-colors"
+            style={{ color: "var(--ink)" }}
+          >
+            {darkMode ? <Sun size={15} strokeWidth={2} /> : <Moon size={15} strokeWidth={2} />}
+          </button>
+
           {session ? (
             <button
               onClick={() => setView("profile")}
@@ -109,7 +120,7 @@ function TopNav({ view, setView, session, profile }) {
   );
 }
 
-function HomeView({ collections, topLiked, openCollection }) {
+function HomeView({ collections, topLiked, openCollection, goToAuthor }) {
   const [query, setQuery] = useState("");
 
   if (collections.length === 0) {
@@ -136,7 +147,7 @@ function HomeView({ collections, topLiked, openCollection }) {
   const featuredPoem = featured.poems[0];
   const excerptLines = featuredPoem.lines.filter((l) => l).slice(0, 3);
   return (
-    <div className="max-w-5xl mx-auto px-6">
+    <div className="max-w-5xl mx-auto px-6 view-enter">
       {/* Hero */}
       <section className="pt-16 pb-14 grid md:grid-cols-[1fr_auto] gap-10 items-end border-b" style={{ borderColor: "var(--rule)" }}>
         <div>
@@ -155,7 +166,16 @@ function HomeView({ collections, topLiked, openCollection }) {
             <WaxSeal letter={featured.seal} color={featured.sealColor} />
             <div className="font-ui text-sm">
               <p style={{ color: "var(--ink)" }}>{featuredPoem.title}</p>
-              <p style={{ color: "var(--ink-light)" }}>extrait de « {featured.title} », {featured.author}</p>
+              <p style={{ color: "var(--ink-light)" }}>
+                extrait de « {featured.title} »,{" "}
+                {featured.author_id ? (
+                  <span role="button" onClick={() => goToAuthor(featured.author_id)} className="hover:underline">
+                    {featured.author}
+                  </span>
+                ) : (
+                  featured.author
+                )}
+              </p>
             </div>
           </div>
           <button
@@ -194,7 +214,21 @@ function HomeView({ collections, topLiked, openCollection }) {
                         {p.title}
                       </h3>
                       <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                        {p.collection.title} · {p.collection.author}
+                        {p.collection.title} ·{" "}
+                        {p.collection.author_id ? (
+                          <span
+                            role="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              goToAuthor(p.collection.author_id);
+                            }}
+                            className="hover:underline"
+                          >
+                            {p.collection.author}
+                          </span>
+                        ) : (
+                          p.collection.author
+                        )}
                       </p>
                     </div>
                   </div>
@@ -258,7 +292,21 @@ function HomeView({ collections, topLiked, openCollection }) {
                   {c.title}
                 </h3>
                 <p className="font-ui text-sm mb-4" style={{ color: "var(--ink-light)" }}>
-                  {c.author} · {c.poems.length} poèmes
+                  {c.author_id ? (
+                    <span
+                      role="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        goToAuthor(c.author_id);
+                      }}
+                      className="hover:underline"
+                    >
+                      {c.author}
+                    </span>
+                  ) : (
+                    c.author
+                  )}{" "}
+                  · {c.poems.length} poème{c.poems.length === 1 ? "" : "s"}
                 </p>
                 <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
                   « {c.poems[0].lines.find((l) => l)} »
@@ -272,8 +320,9 @@ function HomeView({ collections, topLiked, openCollection }) {
   );
 }
 
-function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profile, refresh, onDeleted }) {
+function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profile, refresh, onDeleted, goToAuthor }) {
   const poem = collection.poems[poemIndex];
+  const [fullscreen, setFullscreen] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(poem.likes_count);
   const [saved, setSaved] = useState(false);
@@ -413,8 +462,71 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
     }
   };
 
+  if (fullscreen) {
+    return (
+      <div
+        className="fixed inset-0 overflow-y-auto view-enter"
+        style={{ background: "var(--paper)", zIndex: 50 }}
+      >
+        <div className="max-w-2xl mx-auto px-6 py-10 sm:py-16">
+          <div className="flex items-center justify-between mb-10">
+            <button
+              onClick={() => setFullscreen(false)}
+              className="flex items-center gap-2 font-ui text-sm transition-opacity hover:opacity-70"
+              style={{ color: "var(--ink-light)" }}
+            >
+              <Minimize2 size={15} />
+              Quitter le plein écran
+            </button>
+            <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+              {poemIndex + 1} / {collection.poems.length}
+            </span>
+          </div>
+
+          <h1 className="font-display italic mb-8" style={{ fontSize: "clamp(1.8rem, 4vw, 2.8rem)", color: "var(--ink)" }}>
+            {poem.title}
+          </h1>
+
+          {poem.image_url && (
+            <div className="mb-8 rounded-lg overflow-hidden border" style={{ borderColor: "var(--rule)" }}>
+              <img src={poem.image_url} alt={poem.title} className="w-full h-auto object-cover" style={{ maxHeight: 360 }} />
+            </div>
+          )}
+
+          <div
+            className="flex flex-col gap-[0.05em] font-display italic mb-12"
+            style={{ fontSize: "1.5rem", lineHeight: "2.4rem", color: "var(--ink)" }}
+          >
+            {poem.lines.map((line, i) => (
+              <span key={i}>{line || "\u00A0"}</span>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between pt-6 border-t" style={{ borderColor: "var(--rule)" }}>
+            <button
+              disabled={poemIndex === 0}
+              onClick={() => setPoemIndex(poemIndex - 1)}
+              className="flex items-center gap-2 font-ui text-sm px-3 py-2 rounded-full disabled:opacity-30 transition-opacity"
+              style={{ color: "var(--ink-light)" }}
+            >
+              <ArrowLeft size={15} /> Précédent
+            </button>
+            <button
+              disabled={poemIndex === collection.poems.length - 1}
+              onClick={() => setPoemIndex(poemIndex + 1)}
+              className="flex items-center gap-2 font-ui text-sm px-3 py-2 rounded-full disabled:opacity-30 transition-opacity"
+              style={{ color: "var(--ink-light)" }}
+            >
+              Suivant <ArrowRight size={15} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-5xl mx-auto px-6 py-10">
+    <div className="max-w-5xl mx-auto px-6 py-10 view-enter">
       <button
         onClick={back}
         className="flex items-center gap-2 font-ui text-sm mb-8 transition-opacity hover:opacity-70"
@@ -433,7 +545,13 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                 {collection.title}
               </p>
               <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                {collection.author}
+                {collection.author_id ? (
+                  <span role="button" onClick={() => goToAuthor(collection.author_id)} className="hover:underline">
+                    {collection.author}
+                  </span>
+                ) : (
+                  collection.author
+                )}
               </p>
             </div>
           </div>
@@ -467,6 +585,15 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
               {poem.title}
             </h1>
             <div className="flex items-center gap-2 shrink-0 pt-2">
+              <button
+                onClick={() => setFullscreen(true)}
+                title="Lecture plein écran"
+                className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
+                style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
+              >
+                <Maximize2 size={13} />
+                <span className="hidden sm:inline">Plein écran</span>
+              </button>
               <button
                 onClick={handleShare}
                 title="Copier le lien de ce poème"
@@ -759,7 +886,7 @@ function AuthView({ onSuccess }) {
   };
 
   return (
-    <div className="max-w-md mx-auto px-6 py-16">
+    <div className="max-w-md mx-auto px-6 py-16 view-enter">
       <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
         {mode === "login" ? "Connexion" : "Créer un compte"}
       </p>
@@ -932,7 +1059,7 @@ function WriteView({ session, profile, collections, goToAuth, onPublished }) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-12">
+    <div className="max-w-2xl mx-auto px-6 py-12 view-enter">
       <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
         Nouveau recueil
       </p>
@@ -1174,7 +1301,7 @@ function ProfileView({ collections, openCollection, session, profile, setProfile
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12">
+    <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
       <div className="flex items-start justify-between mb-10">
         <div className="flex items-center gap-4">
           {profile.avatar_url ? (
@@ -1334,6 +1461,276 @@ function SideSnow() {
   );
 }
 
+function AuthorView({ authorId, session, collections, openCollection, back }) {
+  const [authorProfile, setAuthorProfile] = useState(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", authorId)
+      .single()
+      .then(({ data }) => {
+        if (active) setAuthorProfile(data || null);
+      });
+    if (session) {
+      supabase
+        .from("follows")
+        .select("id")
+        .eq("follower_id", session.user.id)
+        .eq("followed_id", authorId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (active) setIsFollowing(!!data);
+        });
+    }
+    if (active) setLoading(false);
+    return () => {
+      active = false;
+    };
+  }, [authorId, session]);
+
+  const toggleFollow = async () => {
+    if (!session) return;
+    if (isFollowing) {
+      await supabase.from("follows").delete().eq("follower_id", session.user.id).eq("followed_id", authorId);
+      setIsFollowing(false);
+    } else {
+      await supabase.from("follows").insert({ follower_id: session.user.id, followed_id: authorId });
+      setIsFollowing(true);
+    }
+  };
+
+  const authorCollections = collections.filter((c) => c.author_id === authorId);
+  const totalLikes = authorCollections.reduce((sum, c) => sum + c.poems.reduce((s, p) => s + p.likes_count, 0), 0);
+  const isSelf = session?.user?.id === authorId;
+
+  if (loading || !authorProfile) {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-24 text-center">
+        <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>
+          Chargement du profil...
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
+      <button
+        onClick={back}
+        className="flex items-center gap-2 font-ui text-sm mb-8 transition-opacity hover:opacity-70"
+        style={{ color: "var(--ink-light)" }}
+      >
+        <ArrowLeft size={15} /> Retour
+      </button>
+
+      <div className="flex items-start justify-between mb-10 gap-4 flex-wrap">
+        <div className="flex items-center gap-4">
+          {authorProfile.avatar_url ? (
+            <img src={authorProfile.avatar_url} alt={authorProfile.username} className="w-14 h-14 rounded-full object-cover" />
+          ) : (
+            <WaxSeal letter={authorProfile.username.charAt(0).toUpperCase()} color="var(--wine)" size={56} />
+          )}
+          <div>
+            <h1 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+              {authorProfile.username}
+            </h1>
+            <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+              {authorCollections.length} recueil{authorCollections.length === 1 ? "" : "s"} · {totalLikes} like{totalLikes === 1 ? "" : "s"} au total
+            </p>
+          </div>
+        </div>
+        {session && !isSelf && (
+          <button
+            onClick={toggleFollow}
+            className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors"
+            style={
+              isFollowing
+                ? { border: "1px solid var(--rule)", color: "var(--ink-light)" }
+                : { background: "var(--ink)", color: "var(--paper-warm)" }
+            }
+          >
+            {isFollowing ? <UserMinus size={15} /> : <UserPlus size={15} />}
+            {isFollowing ? "Ne plus suivre" : "Suivre"}
+          </button>
+        )}
+      </div>
+
+      {authorProfile.bio && (
+        <p className="font-ui text-sm leading-relaxed mb-10" style={{ color: "var(--ink)" }}>
+          {authorProfile.bio}
+        </p>
+      )}
+
+      <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4" style={{ color: "var(--sage)" }}>
+        Recueils
+      </p>
+      {authorCollections.length === 0 ? (
+        <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+          Rien de publié pour le moment.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {authorCollections.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => openCollection(c, 0)}
+              className="flex items-center justify-between p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
+              style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+            >
+              <div className="flex items-center gap-4">
+                <WaxSeal letter={c.seal} color={c.sealColor} />
+                <div>
+                  <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
+                    {c.title}
+                  </p>
+                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                    {c.poems.length} poème{c.poems.length === 1 ? "" : "s"} · {c.theme}
+                  </p>
+                </div>
+              </div>
+              <ArrowRight size={16} style={{ color: "var(--ink-light)" }} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FollowingView({ session, collections, openCollection, goToAuthor }) {
+  const [followedIds, setFollowedIds] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    supabase
+      .from("follows")
+      .select("followed_id")
+      .eq("follower_id", session.user.id)
+      .then(({ data }) => {
+        if (active) setFollowedIds((data || []).map((f) => f.followed_id));
+      });
+    return () => {
+      active = false;
+    };
+  }, [session.user.id]);
+
+  // Leaderboard: total likes per author
+  const authorStats = {};
+  collections.forEach((c) => {
+    if (!c.author_id) return;
+    const likes = c.poems.reduce((s, p) => s + p.likes_count, 0);
+    if (!authorStats[c.author_id]) authorStats[c.author_id] = { author: c.author, author_id: c.author_id, likes: 0, collections: 0 };
+    authorStats[c.author_id].likes += likes;
+    authorStats[c.author_id].collections += 1;
+  });
+  const leaderboard = Object.values(authorStats)
+    .sort((a, b) => b.likes - a.likes)
+    .slice(0, 5);
+
+  const feed = followedIds === null ? null : collections.filter((c) => followedIds.includes(c.author_id));
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-12 view-enter">
+      {/* Leaderboard */}
+      <section className="mb-14">
+        <div className="flex items-center gap-2 mb-6">
+          <Trophy size={16} style={{ color: "var(--wine)" }} />
+          <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+            Auteurs les plus aimés
+          </h2>
+        </div>
+        {leaderboard.length === 0 ? (
+          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+            Pas encore assez de likes pour un classement.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {leaderboard.map((a, i) => (
+              <button
+                key={a.author_id}
+                onClick={() => goToAuthor(a.author_id)}
+                className="flex items-center justify-between p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
+                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm w-5 text-center" style={{ color: "var(--ink-light)" }}>
+                    {i + 1}
+                  </span>
+                  <WaxSeal letter={a.author.charAt(0).toUpperCase()} color="var(--wine)" size={32} />
+                  <div>
+                    <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>
+                      {a.author}
+                    </p>
+                    <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                      {a.collections} recueil{a.collections === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </div>
+                <span className="flex items-center gap-1.5 font-mono text-sm" style={{ color: "var(--wine)" }}>
+                  <Heart size={13} fill="var(--wine)" />
+                  {a.likes}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Feed */}
+      <section>
+        <div className="flex items-center gap-2 mb-6">
+          <Users size={16} style={{ color: "var(--sage)" }} />
+          <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+            Fil de tes abonnements
+          </h2>
+        </div>
+        {feed === null ? (
+          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+            Chargement...
+          </p>
+        ) : feed.length === 0 ? (
+          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+            Tu ne suis encore personne. Va sur le profil d'un auteur depuis "Découvrir" pour le suivre — ses nouveaux recueils apparaîtront ici.
+          </p>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-5">
+            {feed.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => openCollection(c, 0)}
+                className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm"
+                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <WaxSeal letter={c.seal} color={c.sealColor} />
+                  <span
+                    className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded-full"
+                    style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}
+                  >
+                    {c.theme}
+                  </span>
+                </div>
+                <h3 className="font-display italic text-xl mb-1" style={{ color: "var(--ink)" }}>
+                  {c.title}
+                </h3>
+                <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+                  {c.author} · {c.poems.length} poème{c.poems.length === 1 ? "" : "s"}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function ModerationView({ collections, refresh }) {
   const [reports, setReports] = useState([]);
   const [commentsMap, setCommentsMap] = useState({});
@@ -1390,7 +1787,7 @@ function ModerationView({ collections, refresh }) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12">
+    <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
       <p className="flex items-center gap-2 font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
         <ShieldCheck size={14} />
         Modération
@@ -1484,6 +1881,12 @@ export default function App() {
   const [collection, setCollection] = useState(null);
   const [poemIndex, setPoemIndex] = useState(0);
   const [topLiked, setTopLiked] = useState([]);
+  const [authorId, setAuthorId] = useState(null);
+
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("dark_mode") === "1");
+  useEffect(() => {
+    localStorage.setItem("dark_mode", darkMode ? "1" : "0");
+  }, [darkMode]);
 
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -1568,10 +1971,23 @@ export default function App() {
     setView("reader");
   };
 
-  return (
-    <div
-      className="min-h-screen relative overflow-hidden"
-      style={{
+  const goToAuthor = (id) => {
+    if (!id) return;
+    setAuthorId(id);
+    setView("author");
+  };
+
+  const palette = darkMode
+    ? {
+        "--paper": "#1E2230",
+        "--paper-warm": "#2A3040",
+        "--ink": "#EDEAE3",
+        "--ink-light": "#8C95AC",
+        "--wine": "#D08C9B",
+        "--sage": "#9FB5E0",
+        "--rule": "#3A4154",
+      }
+    : {
         "--paper": "#EAE6DC",
         "--paper-warm": "#F7F3EA",
         "--ink": "#262C40",
@@ -1579,6 +1995,13 @@ export default function App() {
         "--wine": "#8B3A4A",
         "--sage": "#6E7F5C",
         "--rule": "#DAD4C6",
+      };
+
+  return (
+    <div
+      className="min-h-screen relative overflow-hidden transition-colors duration-300"
+      style={{
+        ...palette,
         background: "var(--paper)",
         fontFamily: "Inter, sans-serif",
       }}
@@ -1594,14 +2017,19 @@ export default function App() {
           0% { transform: translateY(-6vh); }
           100% { transform: translateY(106vh); }
         }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .view-enter { animation: fadeIn 0.35s ease-out; }
       `}</style>
 
       <SideSnow />
 
       <div className="relative" style={{ zIndex: 1 }}>
-        <TopNav view={view} setView={setView} session={session} profile={profile} />
+        <TopNav view={view} setView={setView} session={session} profile={profile} darkMode={darkMode} setDarkMode={setDarkMode} />
 
-        {view === "home" && <HomeView collections={collections} topLiked={topLiked} openCollection={openCollection} />}
+        {view === "home" && <HomeView collections={collections} topLiked={topLiked} openCollection={openCollection} goToAuthor={goToAuthor} />}
         {view === "reader" && collection && (
           <ReaderView
             collection={collection}
@@ -1612,6 +2040,7 @@ export default function App() {
             profile={profile}
             refresh={loadCollections}
             onDeleted={() => setView("home")}
+            goToAuthor={goToAuthor}
           />
         )}
         {view === "write" && (
@@ -1640,6 +2069,23 @@ export default function App() {
         )}
         {view === "moderation" && profile?.is_moderator && (
           <ModerationView collections={collections} refresh={loadCollections} />
+        )}
+        {view === "author" && authorId && (
+          <AuthorView
+            authorId={authorId}
+            session={session}
+            collections={collections}
+            openCollection={openCollection}
+            back={() => setView("home")}
+          />
+        )}
+        {view === "following" && session && (
+          <FollowingView
+            session={session}
+            collections={collections}
+            openCollection={openCollection}
+            goToAuthor={goToAuthor}
+          />
         )}
       </div>
     </div>
