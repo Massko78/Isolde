@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send } from "lucide-react";
+import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 
@@ -23,16 +23,15 @@ function WaxSeal({ letter, color, size = 36 }) {
   );
 }
 
-function TopNav({ view, setView }) {
+function TopNav({ view, setView, session, profile }) {
   const items = [
     { key: "home", label: "Découvrir", icon: BookOpen },
     { key: "write", label: "Écrire", icon: PenLine },
-    { key: "profile", label: "Profil", icon: User },
   ];
   return (
     <header
-      className="sticky top-0 z-10 border-b backdrop-blur-md"
-      style={{ background: "rgba(234, 244, 253, 0.7)", borderColor: "var(--rule)" }}
+      className="sticky top-0 z-10 border-b"
+      style={{ background: "var(--paper)", borderColor: "var(--rule)" }}
     >
       <div className="max-w-5xl mx-auto flex items-center justify-between px-6 py-4">
         <button
@@ -60,6 +59,36 @@ function TopNav({ view, setView }) {
               </button>
             );
           })}
+
+          {session ? (
+            <button
+              onClick={() => setView("profile")}
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-ui transition-colors"
+              style={{
+                color: view === "profile" ? "var(--paper-warm)" : "var(--ink)",
+                background: view === "profile" ? "var(--ink)" : "transparent",
+              }}
+            >
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" />
+              ) : (
+                <User size={15} strokeWidth={2} />
+              )}
+              {profile?.username || "Profil"}
+            </button>
+          ) : (
+            <button
+              onClick={() => setView("auth")}
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-ui transition-colors"
+              style={{
+                color: view === "auth" ? "var(--paper-warm)" : "var(--ink)",
+                background: view === "auth" ? "var(--ink)" : "transparent",
+              }}
+            >
+              <LogIn size={15} strokeWidth={2} />
+              Connexion
+            </button>
+          )}
         </nav>
       </div>
     </header>
@@ -454,10 +483,138 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
   );
 }
 
-const SEAL_COLORS = ["#6FA3D8", "#9FC1E8", "#7B93B5"];
+const SEAL_COLORS = ["#8B3A4A", "#6E7F5C", "#7C8194"];
 
-function WriteView({ onPublished }) {
-  const [author, setAuthor] = useState("");
+function AuthView({ onSuccess }) {
+  const [mode, setMode] = useState("login"); // "login" | "signup"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    setErrorMsg("");
+    setSubmitting(true);
+
+    if (mode === "signup") {
+      if (!username.trim()) {
+        setErrorMsg("Choisis un pseudo.");
+        setSubmitting(false);
+        return;
+      }
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error || !data.user) {
+        setErrorMsg(error?.message || "Inscription impossible.");
+        setSubmitting(false);
+        return;
+      }
+      const { error: profileError } = await supabase.from("profiles").insert({
+        id: data.user.id,
+        username: username.trim(),
+      });
+      if (profileError) {
+        setErrorMsg("Compte créé, mais le profil n'a pas pu être enregistré (pseudo déjà pris ?).");
+        setSubmitting(false);
+        return;
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setErrorMsg(error.message);
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    setSubmitting(false);
+    onSuccess();
+  };
+
+  return (
+    <div className="max-w-md mx-auto px-6 py-16">
+      <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
+        {mode === "login" ? "Connexion" : "Créer un compte"}
+      </p>
+      <h1 className="font-display italic text-3xl mb-10" style={{ color: "var(--ink)" }}>
+        {mode === "login" ? "Te revoir, c'est un plaisir" : "Rejoindre Dreams"}
+      </h1>
+
+      <div className="flex flex-col gap-5">
+        {mode === "signup" && (
+          <label className="flex flex-col gap-2">
+            <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+              Pseudo
+            </span>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Ex. Sasha"
+              className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+            />
+          </label>
+        )}
+
+        <label className="flex flex-col gap-2">
+          <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+            Email
+          </span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="toi@exemple.com"
+            className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+            Mot de passe
+          </span>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+          />
+        </label>
+
+        {errorMsg && (
+          <p className="font-ui text-sm" style={{ color: "var(--wine)" }}>
+            {errorMsg}
+          </p>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={!email || !password || submitting}
+          className="font-ui text-sm px-6 py-3 rounded-full disabled:opacity-30 transition-opacity"
+          style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+        >
+          {submitting ? "..." : mode === "login" ? "Se connecter" : "Créer mon compte"}
+        </button>
+
+        <button
+          onClick={() => {
+            setMode(mode === "login" ? "signup" : "login");
+            setErrorMsg("");
+          }}
+          className="font-ui text-sm text-left"
+          style={{ color: "var(--ink-light)" }}
+        >
+          {mode === "login" ? "Pas encore de compte ? Crée-le ici" : "Déjà un compte ? Connecte-toi"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WriteView({ session, profile, goToAuth, onPublished }) {
   const [title, setTitle] = useState("");
   const [theme, setTheme] = useState("");
   const [poemTitle, setPoemTitle] = useState("");
@@ -471,7 +628,7 @@ function WriteView({ onPublished }) {
     setSubmitting(true);
     setErrorMsg("");
 
-    const authorName = anonymous ? "Anonyme" : author.trim() || "Anonyme";
+    const authorName = anonymous ? "Anonyme" : profile?.username || "Anonyme";
     const seal = authorName.charAt(0).toUpperCase();
     const sealColor = SEAL_COLORS[Math.floor(Math.random() * SEAL_COLORS.length)];
 
@@ -480,6 +637,7 @@ function WriteView({ onPublished }) {
       .insert({
         title: title.trim(),
         author: authorName,
+        author_id: session.user.id,
         theme: theme.trim() || "Inédit",
         seal,
         seal_color: sealColor,
@@ -511,6 +669,29 @@ function WriteView({ onPublished }) {
     if (onPublished) await onPublished();
   };
 
+  if (!session) {
+    return (
+      <div className="max-w-md mx-auto px-6 py-16 text-center">
+        <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
+          Nouveau recueil
+        </p>
+        <h1 className="font-display italic text-2xl mb-4" style={{ color: "var(--ink)" }}>
+          Connecte-toi pour écrire
+        </h1>
+        <p className="font-ui text-sm mb-6" style={{ color: "var(--ink-light)" }}>
+          Un compte permet de retrouver tes recueils et de les gérer depuis ton profil.
+        </p>
+        <button
+          onClick={goToAuth}
+          className="font-ui text-sm px-6 py-3 rounded-full"
+          style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+        >
+          Se connecter / créer un compte
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-6 py-12">
       <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
@@ -521,20 +702,6 @@ function WriteView({ onPublished }) {
       </h1>
 
       <div className="flex flex-col gap-6">
-        <label className="flex flex-col gap-2">
-          <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
-            Votre nom
-          </span>
-          <input
-            value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-            placeholder="Ex. Sasha M."
-            disabled={anonymous}
-            className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1 disabled:opacity-40"
-            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-          />
-        </label>
-
         <label className="flex flex-col gap-2">
           <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
             Titre du recueil
@@ -641,109 +808,207 @@ function WriteView({ onPublished }) {
   );
 }
 
-function ProfileView({ collections, openCollection }) {
-  const mine = collections[2] ? [collections[2]] : [];
+function ProfileView({ collections, openCollection, session, profile, setProfile, goToAuth }) {
+  const [editing, setEditing] = useState(false);
+  const [username, setUsername] = useState("");
+  const [bio, setBio] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    setUsername(profile?.username || "");
+    setBio(profile?.bio || "");
+    setAvatarUrl(profile?.avatar_url || "");
+  }, [profile]);
+
+  if (!session) {
+    return (
+      <div className="max-w-md mx-auto px-6 py-16 text-center">
+        <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
+          Profil
+        </p>
+        <h1 className="font-display italic text-2xl mb-4" style={{ color: "var(--ink)" }}>
+          Pas encore connecté
+        </h1>
+        <p className="font-ui text-sm mb-6" style={{ color: "var(--ink-light)" }}>
+          Crée un compte pour avoir ton propre profil, tes recueils et ta bio.
+        </p>
+        <button
+          onClick={goToAuth}
+          className="font-ui text-sm px-6 py-3 rounded-full"
+          style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+        >
+          Se connecter / créer un compte
+        </button>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-24 text-center">
+        <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>
+          Chargement du profil...
+        </p>
+      </div>
+    );
+  }
+
+  const mine = collections.filter((c) => c.author_id === session.user.id);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setErrorMsg("");
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({
+        username: username.trim(),
+        bio: bio.trim() || null,
+        avatar_url: avatarUrl.trim() || null,
+      })
+      .eq("id", session.user.id)
+      .select()
+      .single();
+    setSaving(false);
+    if (error || !data) {
+      setErrorMsg("Ce pseudo est peut-être déjà pris.");
+      return;
+    }
+    setProfile(data);
+    setEditing(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
   return (
     <div className="max-w-3xl mx-auto px-6 py-12">
-      <div className="flex items-center gap-4 mb-10">
-        <WaxSeal letter="A" color="var(--wine)" size={56} />
-        <div>
-          <h1 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
-            Aïcha Belmont
-          </h1>
-          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-            1 recueil · 12 poèmes lus ce mois-ci
-          </p>
+      <div className="flex items-start justify-between mb-10">
+        <div className="flex items-center gap-4">
+          {profile.avatar_url ? (
+            <img src={profile.avatar_url} alt={profile.username} className="w-14 h-14 rounded-full object-cover" />
+          ) : (
+            <WaxSeal letter={profile.username.charAt(0).toUpperCase()} color="var(--wine)" size={56} />
+          )}
+          <div>
+            <h1 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+              {profile.username}
+            </h1>
+            <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+              {mine.length} recueil{mine.length === 1 ? "" : "s"} publié{mine.length === 1 ? "" : "s"}
+            </p>
+          </div>
         </div>
+        <button onClick={handleLogout} className="flex items-center gap-2 font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+          <LogOut size={14} />
+          Se déconnecter
+        </button>
       </div>
+
+      {editing ? (
+        <div className="flex flex-col gap-4 mb-10 p-5 rounded-lg border" style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}>
+          <label className="flex flex-col gap-2">
+            <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+              Pseudo
+            </span>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+              Photo de profil (lien)
+            </span>
+            <input
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder="Coller un lien d'image..."
+              className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+              Bio
+            </span>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              rows={3}
+              placeholder="Quelques mots sur toi..."
+              className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1 resize-none"
+              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+            />
+          </label>
+          {errorMsg && (
+            <p className="font-ui text-sm" style={{ color: "var(--wine)" }}>
+              {errorMsg}
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              disabled={!username.trim() || saving}
+              className="font-ui text-sm px-5 py-2.5 rounded-full disabled:opacity-30"
+              style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+            >
+              {saving ? "..." : "Enregistrer"}
+            </button>
+            <button onClick={() => setEditing(false)} className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-10">
+          {profile.bio && (
+            <p className="font-ui text-sm leading-relaxed mb-3" style={{ color: "var(--ink)" }}>
+              {profile.bio}
+            </p>
+          )}
+          <button onClick={() => setEditing(true)} className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+            Modifier le profil
+          </button>
+        </div>
+      )}
 
       <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4" style={{ color: "var(--sage)" }}>
-        Recueils publiés
+        Mes recueils
       </p>
-      <div className="flex flex-col gap-3">
-        {mine.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => openCollection(c, 0)}
-            className="flex items-center justify-between p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
-            style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-          >
-            <div className="flex items-center gap-4">
-              <WaxSeal letter={c.seal} color={c.sealColor} />
-              <div>
-                <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
-                  {c.title}
-                </p>
-                <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                  {c.poems.length} poèmes · {c.theme}
-                </p>
+      {mine.length === 0 ? (
+        <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+          Tu n'as encore rien publié. Va dans "Écrire" pour partager ton premier poème.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {mine.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => openCollection(c, 0)}
+              className="flex items-center justify-between p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
+              style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+            >
+              <div className="flex items-center gap-4">
+                <WaxSeal letter={c.seal} color={c.sealColor} />
+                <div>
+                  <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
+                    {c.title}
+                  </p>
+                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                    {c.poems.length} poème{c.poems.length === 1 ? "" : "s"} · {c.theme}
+                  </p>
+                </div>
               </div>
-            </div>
-            <ArrowRight size={16} style={{ color: "var(--ink-light)" }} />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CloudLayer() {
-  const clouds = [
-    { top: "6%", left: "-8%", size: 320, duration: 95, delay: 0, opacity: 0.55 },
-    { top: "16%", left: "62%", size: 220, duration: 120, delay: -40, opacity: 0.45 },
-    { top: "46%", left: "18%", size: 360, duration: 140, delay: -70, opacity: 0.35 },
-    { top: "72%", left: "68%", size: 260, duration: 105, delay: -20, opacity: 0.4 },
-    { top: "85%", left: "-5%", size: 280, duration: 130, delay: -55, opacity: 0.35 },
-  ];
-  return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
-      {clouds.map((c, i) => (
-        <div
-          key={i}
-          className="absolute rounded-full"
-          style={{
-            top: c.top,
-            left: c.left,
-            width: c.size,
-            height: c.size * 0.5,
-            background: "#FFFFFF",
-            filter: "blur(40px)",
-            opacity: c.opacity,
-            animation: `drift ${c.duration}s ease-in-out infinite`,
-            animationDelay: `${c.delay}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function Snow() {
-  const flakes = Array.from({ length: 18 }, (_, i) => ({
-    left: (i * 53.7) % 100,
-    size: 2 + (i % 3),
-    duration: 22 + (i % 5) * 5,
-    delay: -(i * 2.3),
-    opacity: 0.3 + (i % 3) * 0.15,
-  }));
-  return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
-      {flakes.map((f, i) => (
-        <div
-          key={i}
-          className="absolute rounded-full"
-          style={{
-            left: `${f.left}%`,
-            top: "-4%",
-            width: f.size,
-            height: f.size,
-            background: "#FFFFFF",
-            opacity: f.opacity,
-            animation: `snowfall ${f.duration}s linear infinite`,
-            animationDelay: `${f.delay}s`,
-          }}
-        />
-      ))}
+              <ArrowRight size={16} style={{ color: "var(--ink-light)" }} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -753,8 +1018,31 @@ export default function App() {
   const [collections, setCollections] = useState([]);
   const [collection, setCollection] = useState(null);
   const [poemIndex, setPoemIndex] = useState(0);
-
   const [topLiked, setTopLiked] = useState([]);
+
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+
+  const loadProfile = async (userId) => {
+    const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
+    setProfile(data || null);
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      if (data.session) loadProfile(data.session.user.id);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      if (newSession) {
+        loadProfile(newSession.user.id);
+      } else {
+        setProfile(null);
+      }
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   const loadCollections = async () => {
     const { data: cols, error: colsError } = await supabase
@@ -797,15 +1085,15 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen relative overflow-hidden"
+      className="min-h-screen"
       style={{
-        "--paper": "#EAF4FD",
-        "--paper-warm": "#FFFFFF",
-        "--ink": "#34465E",
-        "--ink-light": "#9AB0CC",
-        "--wine": "#6FA3D8",
-        "--sage": "#BFD6EF",
-        "--rule": "#DFEBFA",
+        "--paper": "#EAE6DC",
+        "--paper-warm": "#F7F3EA",
+        "--ink": "#262C40",
+        "--ink-light": "#7C8194",
+        "--wine": "#8B3A4A",
+        "--sage": "#6E7F5C",
+        "--rule": "#DAD4C6",
         background: "var(--paper)",
         fontFamily: "Inter, sans-serif",
       }}
@@ -816,22 +1104,10 @@ export default function App() {
         .font-ui { font-family: 'Inter', sans-serif; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
         input:focus, textarea:focus { ring-color: var(--wine); }
-
-        @keyframes drift {
-          0%, 100% { transform: translateX(0) translateY(0); }
-          50% { transform: translateX(36px) translateY(-12px); }
-        }
-        @keyframes snowfall {
-          0% { transform: translateY(-6vh) translateX(0); }
-          100% { transform: translateY(106vh) translateX(24px); }
-        }
       `}</style>
 
-      <CloudLayer />
-      <Snow />
-
       <div className="relative" style={{ zIndex: 1 }}>
-        <TopNav view={view} setView={setView} />
+        <TopNav view={view} setView={setView} session={session} profile={profile} />
 
         {view === "home" && <HomeView collections={collections} topLiked={topLiked} openCollection={openCollection} />}
         {view === "reader" && collection && (
@@ -842,8 +1118,29 @@ export default function App() {
             back={() => setView("home")}
           />
         )}
-        {view === "write" && <WriteView onPublished={async () => { await loadCollections(); setView("home"); }} />}
-        {view === "profile" && <ProfileView collections={collections} openCollection={openCollection} />}
+        {view === "write" && (
+          <WriteView
+            session={session}
+            profile={profile}
+            goToAuth={() => setView("auth")}
+            onPublished={async () => { await loadCollections(); setView("home"); }}
+          />
+        )}
+        {view === "profile" && (
+          <ProfileView
+            collections={collections}
+            openCollection={openCollection}
+            session={session}
+            profile={profile}
+            setProfile={setProfile}
+            goToAuth={() => setView("auth")}
+          />
+        )}
+        {view === "auth" && (
+          <AuthView
+            onSuccess={() => setView("profile")}
+          />
+        )}
       </div>
     </div>
   );
