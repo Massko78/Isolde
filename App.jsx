@@ -23,6 +23,20 @@ function WaxSeal({ letter, color, size = 36 }) {
   );
 }
 
+function AuthorBadge({ avatarUrl, letter, color, size = 36 }) {
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt=""
+        className="rounded-full object-cover shrink-0"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  return <WaxSeal letter={letter} color={color} size={size} />;
+}
+
 function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWrite }) {
   const items = [
     { key: "home", label: "Découvrir", icon: BookOpen },
@@ -120,7 +134,7 @@ function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWr
   );
 }
 
-function HomeView({ collections, topLiked, openCollection, goToAuthor }) {
+function HomeView({ collections, topLiked, freePoems, openCollection, openFreePoem, goToAuthor }) {
   const [query, setQuery] = useState("");
 
   if (collections.length === 0) {
@@ -163,7 +177,7 @@ function HomeView({ collections, topLiked, openCollection, goToAuthor }) {
             ))}
           </p>
           <div className="flex items-center gap-3 mb-8">
-            <WaxSeal letter={featured.seal} color={featured.sealColor} />
+            <AuthorBadge avatarUrl={featured.authorAvatar} letter={featured.seal} color={featured.sealColor} />
             <div className="font-ui text-sm">
               <p style={{ color: "var(--ink)" }}>{featuredPoem.title}</p>
               <p style={{ color: "var(--ink-light)" }}>
@@ -208,7 +222,7 @@ function HomeView({ collections, topLiked, openCollection, goToAuthor }) {
                   style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
                 >
                   <div className="flex items-center gap-4">
-                    <WaxSeal letter={p.collection.seal} color={p.collection.sealColor} />
+                    <AuthorBadge avatarUrl={p.collection.authorAvatar} letter={p.collection.seal} color={p.collection.sealColor} />
                     <div>
                       <h3 className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
                         {p.title}
@@ -273,54 +287,113 @@ function HomeView({ collections, topLiked, openCollection, goToAuthor }) {
               <button
                 key={c.id}
                 onClick={() => openCollection(c, 0)}
-                className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm group"
+                className="text-left rounded-lg border transition-colors hover:shadow-sm group overflow-hidden"
                 style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <WaxSeal letter={c.seal} color={c.sealColor} />
-                  <span
-                    className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded-full"
-                    style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}
-                  >
-                    {c.theme}
-                  </span>
-                </div>
-                <h3
-                  className="font-display italic text-xl mb-1 transition-colors"
-                  style={{ color: "var(--ink)" }}
-                >
-                  {c.title}
-                </h3>
-                <p className="font-ui text-sm mb-4" style={{ color: "var(--ink-light)" }}>
-                  {c.author_id ? (
+                {c.cover_url && (
+                  <div className="w-full" style={{ height: 120 }}>
+                    <img src={c.cover_url} alt="" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
                     <span
-                      role="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        goToAuthor(c.author_id);
-                      }}
-                      className="hover:underline"
+                      className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded-full"
+                      style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}
                     >
-                      {c.author}
+                      {c.theme}
                     </span>
-                  ) : (
-                    c.author
-                  )}{" "}
-                  · {c.poems.length} poème{c.poems.length === 1 ? "" : "s"}
-                </p>
-                <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
-                  « {c.poems[0].lines.find((l) => l)} »
-                </p>
+                  </div>
+                  <h3
+                    className="font-display italic text-xl mb-1 transition-colors"
+                    style={{ color: "var(--ink)" }}
+                  >
+                    {c.title}
+                  </h3>
+                  <p className="font-ui text-sm mb-4" style={{ color: "var(--ink-light)" }}>
+                    {c.author_id ? (
+                      <span
+                        role="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          goToAuthor(c.author_id);
+                        }}
+                        className="hover:underline"
+                      >
+                        {c.author}
+                      </span>
+                    ) : (
+                      c.author
+                    )}{" "}
+                    · {c.poems.length} poème{c.poems.length === 1 ? "" : "s"}
+                  </p>
+                  <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                    « {c.poems[0].lines.find((l) => l)} »
+                  </p>
+                </div>
               </button>
             ))}
           </div>
         )}
       </section>
+
+      {/* Free-standing poems */}
+      {freePoems.length > 0 && (
+        <section className="pb-14">
+          <div className="flex items-baseline justify-between mb-6">
+            <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+              Poèmes libres
+            </h2>
+            <p className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+              {freePoems.length} poème{freePoems.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-5">
+            {freePoems.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => openFreePoem(p)}
+                className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm"
+                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+              >
+                <div className="flex items-center gap-4 mb-3">
+                  <AuthorBadge avatarUrl={p.authorAvatar} letter={(p.author || "?").charAt(0).toUpperCase()} color="var(--wine)" size={32} />
+                  <div>
+                    <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
+                      {p.title}
+                    </p>
+                    <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                      {p.author_id ? (
+                        <span
+                          role="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            goToAuthor(p.author_id);
+                          }}
+                          className="hover:underline"
+                        >
+                          {p.author}
+                        </span>
+                      ) : (
+                        p.author
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                  « {p.lines.find((l) => l)} »
+                </p>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
 
-function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profile, refresh, onDeleted, goToAuthor }) {
+function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profile, refresh, onDeleted, goToAuthor, editDraft }) {
   const poem = collection.poems[poemIndex];
   const [fullscreen, setFullscreen] = useState(false);
   const [liked, setLiked] = useState(false);
@@ -418,8 +491,18 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
     if (!error) setComments((prev) => prev.filter((c) => c.id !== commentId));
   };
 
+  const handleEdit = () => {
+    editDraft({ ...poem, collection: collection.isFree ? null : collection });
+  };
+
   const handleDeletePoem = async () => {
     if (!window.confirm(`Supprimer le poème « ${poem.title} » ?`)) return;
+    if (collection.isFree) {
+      await supabase.from("poems").delete().eq("id", poem.id);
+      await refresh();
+      onDeleted();
+      return;
+    }
     if (collection.poems.length === 1) {
       // Last poem: delete the whole collection
       await supabase.from("collections").delete().eq("id", collection.id);
@@ -539,10 +622,10 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
         {/* Table of contents */}
         <aside className="md:sticky md:top-24 self-start">
           <div className="flex items-center gap-3 mb-5">
-            <WaxSeal letter={collection.seal} color={collection.sealColor} size={32} />
+            <AuthorBadge avatarUrl={collection.authorAvatar} letter={collection.seal} color={collection.sealColor} size={32} />
             <div>
               <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>
-                {collection.title}
+                {collection.isFree ? "Poème libre" : collection.title}
               </p>
               <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
                 {collection.author_id ? (
@@ -555,27 +638,31 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
               </p>
             </div>
           </div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] mb-3" style={{ color: "var(--sage)" }}>
-            Sommaire
-          </p>
-          <ul className="flex flex-col gap-1 border-l" style={{ borderColor: "var(--rule)" }}>
-            {collection.poems.map((p, i) => (
-              <li key={p.id}>
-                <button
-                  onClick={() => setPoemIndex(i)}
-                  className="w-full text-left pl-4 py-1.5 font-ui text-sm transition-colors"
-                  style={{
-                    color: i === poemIndex ? "var(--wine)" : "var(--ink-light)",
-                    borderLeft: i === poemIndex ? "2px solid var(--wine)" : "2px solid transparent",
-                    marginLeft: "-1px",
-                  }}
-                >
-                  <span className="font-mono text-xs mr-2">{String(i + 1).padStart(2, "0")}</span>
-                  {p.title}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {!collection.isFree && (
+            <>
+              <p className="font-mono text-[11px] uppercase tracking-[0.2em] mb-3" style={{ color: "var(--sage)" }}>
+                Sommaire
+              </p>
+              <ul className="flex flex-col gap-1 border-l" style={{ borderColor: "var(--rule)" }}>
+                {collection.poems.map((p, i) => (
+                  <li key={p.id}>
+                    <button
+                      onClick={() => setPoemIndex(i)}
+                      className="w-full text-left pl-4 py-1.5 font-ui text-sm transition-colors"
+                      style={{
+                        color: i === poemIndex ? "var(--wine)" : "var(--ink-light)",
+                        borderLeft: i === poemIndex ? "2px solid var(--wine)" : "2px solid transparent",
+                        marginLeft: "-1px",
+                      }}
+                    >
+                      <span className="font-mono text-xs mr-2">{String(i + 1).padStart(2, "0")}</span>
+                      {p.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </aside>
 
         {/* Poem reader */}
@@ -618,6 +705,15 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
               {canManage && (
                 <>
                   <button
+                    onClick={handleEdit}
+                    title="Modifier ce poème"
+                    className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
+                    style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
+                  >
+                    <PenLine size={13} />
+                    <span className="hidden sm:inline">Modifier</span>
+                  </button>
+                  <button
                     onClick={handleDeletePoem}
                     title="Supprimer ce poème"
                     className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
@@ -626,15 +722,17 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                     <Trash2 size={13} />
                     Poème
                   </button>
-                  <button
-                    onClick={handleDeleteCollection}
-                    title="Supprimer tout le recueil"
-                    className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
-                    style={{ borderColor: "var(--rule)", color: "var(--wine)" }}
-                  >
-                    <Trash2 size={13} />
-                    Recueil
-                  </button>
+                  {!collection.isFree && (
+                    <button
+                      onClick={handleDeleteCollection}
+                      title="Supprimer tout le recueil"
+                      className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
+                      style={{ borderColor: "var(--rule)", color: "var(--wine)" }}
+                    >
+                      <Trash2 size={13} />
+                      Recueil
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -975,6 +1073,7 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
   const [existingId, setExistingId] = useState(myCollections[0]?.id || "");
   const [title, setTitle] = useState("");
   const [theme, setTheme] = useState("");
+  const [cover, setCover] = useState("");
   const [poemTitle, setPoemTitle] = useState("");
   const [text, setText] = useState("");
   const [image, setImage] = useState("");
@@ -1026,6 +1125,7 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
           author: authorName,
           author_id: session.user.id,
           theme: theme.trim() || "Inédit",
+          cover_url: cover.trim() || null,
           seal,
           seal_color: sealColor,
         })
@@ -1040,17 +1140,33 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
       collectionId = col.id;
     }
 
-    const targetCollection = myCollections.find((c) => c.id === collectionId);
-    const position = target === "existing" && targetCollection ? targetCollection.poems.length : 0;
+    let poemPayload;
+    if (target === "free") {
+      const authorName = anonymous ? "Anonyme" : profile?.username || "Anonyme";
+      poemPayload = {
+        collection_id: null,
+        author_id: session.user.id,
+        author: authorName,
+        title: poemTitle.trim(),
+        content: text,
+        image_url: image.trim() || null,
+        position: 0,
+        status,
+      };
+    } else {
+      const targetCollection = myCollections.find((c) => c.id === collectionId);
+      const position = target === "existing" && targetCollection ? targetCollection.poems.length : 0;
+      poemPayload = {
+        collection_id: collectionId,
+        title: poemTitle.trim(),
+        content: text,
+        image_url: image.trim() || null,
+        position,
+        status,
+      };
+    }
 
-    const { error: poemError } = await supabase.from("poems").insert({
-      collection_id: collectionId,
-      title: poemTitle.trim(),
-      content: text,
-      image_url: image.trim() || null,
-      position,
-      status,
-    });
+    const { error: poemError } = await supabase.from("poems").insert(poemPayload);
 
     setSubmitting(false);
 
@@ -1092,21 +1208,21 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
   return (
     <div className="max-w-2xl mx-auto px-6 py-12 view-enter">
       <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
-        {editingDraft ? "Brouillon" : "Nouveau recueil"}
+        {editingDraft ? (editingDraft.status === "published" ? "Modifier" : "Brouillon") : "Nouveau recueil"}
       </p>
       <h1 className="font-display italic text-3xl mb-2" style={{ color: "var(--ink)" }}>
-        {editingDraft ? "Continuer ce poème" : "Écrire quelque chose"}
+        {editingDraft ? (editingDraft.status === "published" ? "Modifier ce poème" : "Continuer ce poème") : "Écrire quelque chose"}
       </h1>
       {editingDraft && (
         <p className="font-ui text-sm mb-8" style={{ color: "var(--ink-light)" }}>
-          Dans le recueil « {editingDraft.collection?.title} »
+          {editingDraft.collection ? <>Dans le recueil « {editingDraft.collection.title} »</> : "Poème libre"}
         </p>
       )}
       {!editingDraft && <div className="mb-10" />}
 
       <div className="flex flex-col gap-6">
-        {!editingDraft && myCollections.length > 0 && (
-          <div className="flex items-center gap-2 p-1 rounded-full border self-start" style={{ borderColor: "var(--rule)" }}>
+        {!editingDraft && (
+          <div className="flex items-center gap-2 p-1 rounded-full border self-start flex-wrap" style={{ borderColor: "var(--rule)" }}>
             <button
               onClick={() => setTarget("new")}
               className="font-ui text-xs px-4 py-2 rounded-full transition-colors"
@@ -1118,15 +1234,27 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
               Nouveau recueil
             </button>
             <button
-              onClick={() => setTarget("existing")}
+              onClick={() => setTarget("free")}
               className="font-ui text-xs px-4 py-2 rounded-full transition-colors"
               style={{
-                background: target === "existing" ? "var(--ink)" : "transparent",
-                color: target === "existing" ? "var(--paper-warm)" : "var(--ink-light)",
+                background: target === "free" ? "var(--ink)" : "transparent",
+                color: target === "free" ? "var(--paper-warm)" : "var(--ink-light)",
               }}
             >
-              Ajouter à un recueil existant
+              Poème libre
             </button>
+            {myCollections.length > 0 && (
+              <button
+                onClick={() => setTarget("existing")}
+                className="font-ui text-xs px-4 py-2 rounded-full transition-colors"
+                style={{
+                  background: target === "existing" ? "var(--ink)" : "transparent",
+                  color: target === "existing" ? "var(--paper-warm)" : "var(--ink-light)",
+                }}
+              >
+                Ajouter à un recueil existant
+              </button>
+            )}
           </div>
         )}
 
@@ -1177,6 +1305,25 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
                 style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
               />
             </label>
+
+            <label className="flex flex-col gap-2">
+              <span className="font-ui text-xs uppercase tracking-wider flex items-center gap-2" style={{ color: "var(--ink-light)" }}>
+                <ImageIcon size={13} />
+                Image de couverture (optionnel)
+              </span>
+              <input
+                value={cover}
+                onChange={(e) => setCover(e.target.value)}
+                placeholder="Coller un lien d'image..."
+                className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+                style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              />
+              {cover && (
+                <div className="rounded-lg overflow-hidden border mt-1" style={{ borderColor: "var(--rule)" }}>
+                  <img src={cover} alt="Aperçu" className="w-full h-auto object-cover" style={{ maxHeight: 160 }} />
+                </div>
+              )}
+            </label>
           </>
         )}
 
@@ -1226,7 +1373,7 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
           )}
         </label>
 
-        {!editingDraft && target === "new" && (
+        {!editingDraft && (target === "new" || target === "free") && (
           <label className="flex items-center gap-2 font-ui text-sm cursor-pointer" style={{ color: "var(--ink-light)" }}>
             <input
               type="checkbox"
@@ -1250,7 +1397,13 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
             style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
           >
             <FileEdit size={14} />
-            {submitting ? "..." : editingDraft ? "Enregistrer le brouillon" : "Enregistrer comme brouillon"}
+            {submitting
+              ? "..."
+              : editingDraft
+              ? editingDraft.status === "published"
+                ? "Repasser en brouillon"
+                : "Enregistrer le brouillon"
+              : "Enregistrer comme brouillon"}
           </button>
           <button
             onClick={() => handleSave("published")}
@@ -1258,7 +1411,13 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
             className="font-ui text-sm px-6 py-3 rounded-full disabled:opacity-30 transition-opacity"
             style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
           >
-            {submitting ? "Publication..." : "Publier"}
+            {submitting
+              ? "..."
+              : editingDraft
+              ? editingDraft.status === "published"
+                ? "Mettre à jour"
+                : "Publier"
+              : "Publier"}
           </button>
           {errorMsg && (
             <span className="font-ui text-sm" style={{ color: "var(--wine)" }}>
@@ -1319,7 +1478,9 @@ function ProfileView({ collections, draftPoems, openCollection, session, profile
   }
 
   const mine = collections.filter((c) => c.author_id === session.user.id);
-  const myDrafts = (draftPoems || []).filter((d) => d.collection?.author_id === session.user.id);
+  const myDrafts = (draftPoems || []).filter(
+    (d) => d.collection?.author_id === session.user.id || d.author_id === session.user.id
+  );
 
   const handleSave = async () => {
     setSaving(true);
@@ -1458,7 +1619,7 @@ function ProfileView({ collections, draftPoems, openCollection, session, profile
               style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
             >
               <div className="flex items-center gap-4">
-                <WaxSeal letter={c.seal} color={c.sealColor} />
+                <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
                 <div>
                   <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
                     {c.title}
@@ -1493,7 +1654,7 @@ function ProfileView({ collections, draftPoems, openCollection, session, profile
                     {d.title || "Sans titre"}
                   </p>
                   <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                    {d.collection?.title}
+                    {d.collection?.title || "Poème libre"}
                   </p>
                 </div>
                 <span className="font-ui text-xs px-3 py-1.5 rounded-full border" style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}>
@@ -1713,7 +1874,7 @@ function AuthorView({ authorId, session, collections, openCollection, back }) {
               style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
             >
               <div className="flex items-center gap-4">
-                <WaxSeal letter={c.seal} color={c.sealColor} />
+                <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
                 <div>
                   <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
                     {c.title}
@@ -1837,7 +1998,7 @@ function FollowingView({ session, collections, openCollection, goToAuthor }) {
                 style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
               >
                 <div className="flex items-start justify-between mb-4">
-                  <WaxSeal letter={c.seal} color={c.sealColor} />
+                  <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
                   <span
                     className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded-full"
                     style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}
@@ -1860,7 +2021,7 @@ function FollowingView({ session, collections, openCollection, goToAuthor }) {
   );
 }
 
-function ModerationView({ collections, refresh }) {
+function ModerationView({ collections, freePoems, refresh }) {
   const [reports, setReports] = useState([]);
   const [commentsMap, setCommentsMap] = useState({});
   const [loading, setLoading] = useState(true);
@@ -1885,7 +2046,10 @@ function ModerationView({ collections, refresh }) {
     load();
   }, []);
 
-  const allPoems = collections.flatMap((c) => c.poems.map((p) => ({ ...p, collection: c })));
+  const allPoems = [
+    ...collections.flatMap((c) => c.poems.map((p) => ({ ...p, collection: c }))),
+    ...(freePoems || []).map((p) => ({ ...p, collection: null })),
+  ];
 
   const dismiss = async (reportId) => {
     await supabase.from("reports").delete().eq("id", reportId);
@@ -1950,7 +2114,7 @@ function ModerationView({ collections, refresh }) {
                     <p className="font-display italic text-base mb-1" style={{ color: "var(--ink)" }}>
                       {poem.title}
                       <span className="font-ui text-xs not-italic ml-2" style={{ color: "var(--ink-light)" }}>
-                        — {poem.collection.title}, {poem.collection.author}
+                        {poem.collection ? <>— {poem.collection.title}, {poem.collection.author}</> : <>— Poème libre, {poem.author}</>}
                       </span>
                     </p>
                   ) : (
@@ -2011,6 +2175,7 @@ export default function App() {
   const [poemIndex, setPoemIndex] = useState(0);
   const [topLiked, setTopLiked] = useState([]);
   const [draftPoems, setDraftPoems] = useState([]);
+  const [freePoems, setFreePoems] = useState([]);
   const [editingDraft, setEditingDraft] = useState(null);
   const [authorId, setAuthorId] = useState(null);
 
@@ -2061,10 +2226,22 @@ export default function App() {
 
     if (colsError || poemsError || !cols || !poems) return;
 
+    const authorIds = [
+      ...new Set([...cols.map((c) => c.author_id), ...poems.map((p) => p.author_id)].filter(Boolean)),
+    ];
+    let avatarMap = {};
+    if (authorIds.length > 0) {
+      const { data: profs } = await supabase.from("profiles").select("id, avatar_url").in("id", authorIds);
+      (profs || []).forEach((p) => {
+        avatarMap[p.id] = p.avatar_url;
+      });
+    }
+
     const shaped = cols
       .map((c) => ({
         ...c,
         sealColor: c.seal_color,
+        authorAvatar: c.author_id ? avatarMap[c.author_id] : null,
         poems: poems
           .filter((p) => p.collection_id === c.id && p.status === "published")
           .map((p) => ({ ...p, lines: p.content.split("\n") })),
@@ -2072,15 +2249,23 @@ export default function App() {
       .filter((c) => c.poems.length > 0);
     setCollections(shaped);
 
+    const free = poems
+      .filter((p) => !p.collection_id && p.status === "published")
+      .map((p) => ({ ...p, lines: p.content.split("\n"), authorAvatar: p.author_id ? avatarMap[p.author_id] : null }));
+    setFreePoems(free);
+
     const drafts = poems
       .filter((p) => p.status === "draft")
       .map((p) => {
         const col = cols.find((c) => c.id === p.collection_id);
-        return { ...p, lines: p.content.split("\n"), collection: col };
+        return { ...p, lines: p.content.split("\n"), collection: col || null };
       });
     setDraftPoems(drafts);
 
-    const allPoems = shaped.flatMap((c) => c.poems.map((p) => ({ ...p, collection: c })));
+    const allPoems = [
+      ...shaped.flatMap((c) => c.poems.map((p) => ({ ...p, collection: c }))),
+      ...free.map((p) => ({ ...p, collection: null })),
+    ];
     const top = [...allPoems]
       .filter((p) => p.likes_count > 0)
       .sort((a, b) => b.likes_count - a.likes_count)
@@ -2096,7 +2281,7 @@ export default function App() {
 
   // Open a poem directly if the URL contains ?poem=ID (for shared links)
   useEffect(() => {
-    if (collections.length === 0 || deepLinkHandled.current) return;
+    if ((collections.length === 0 && freePoems.length === 0) || deepLinkHandled.current) return;
     const params = new URLSearchParams(window.location.search);
     const poemId = params.get("poem");
     if (!poemId) return;
@@ -2107,14 +2292,33 @@ export default function App() {
         setCollection(c);
         setPoemIndex(idx);
         setView("reader");
-        break;
+        return;
       }
     }
-  }, [collections]);
+    const freePoem = freePoems.find((p) => String(p.id) === poemId);
+    if (freePoem) openFreePoem(freePoem);
+  }, [collections, freePoems]);
 
   const openCollection = (c, i) => {
     setCollection(c);
     setPoemIndex(i);
+    setView("reader");
+  };
+
+  const openFreePoem = (poem) => {
+    const wrapped = {
+      id: null,
+      title: null,
+      author: poem.author,
+      author_id: poem.author_id,
+      seal: (poem.author || "?").charAt(0).toUpperCase(),
+      sealColor: "#8B3A4A",
+      authorAvatar: poem.authorAvatar,
+      poems: [poem],
+      isFree: true,
+    };
+    setCollection(wrapped);
+    setPoemIndex(0);
     setView("reader");
   };
 
@@ -2187,7 +2391,7 @@ export default function App() {
       <div className="relative" style={{ zIndex: 1 }}>
         <TopNav view={view} setView={setView} session={session} profile={profile} darkMode={darkMode} setDarkMode={setDarkMode} goToWrite={() => { setEditingDraft(null); setView("write"); }} />
 
-        {view === "home" && <HomeView collections={collections} topLiked={topLiked} openCollection={openCollection} goToAuthor={goToAuthor} />}
+        {view === "home" && <HomeView collections={collections} topLiked={topLiked} freePoems={freePoems} openCollection={openCollection} openFreePoem={openFreePoem} goToAuthor={goToAuthor} />}
         {view === "reader" && collection && (
           <ReaderView
             collection={collection}
@@ -2199,6 +2403,7 @@ export default function App() {
             refresh={loadCollections}
             onDeleted={() => setView("home")}
             goToAuthor={goToAuthor}
+            editDraft={editDraft}
           />
         )}
         {view === "write" && (
@@ -2242,7 +2447,7 @@ export default function App() {
           />
         )}
         {view === "moderation" && profile?.is_moderator && (
-          <ModerationView collections={collections} refresh={loadCollections} />
+          <ModerationView collections={collections} freePoems={freePoems} refresh={loadCollections} />
         )}
         {view === "author" && authorId && (
           <AuthorView
