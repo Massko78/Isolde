@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit } from "lucide-react";
+import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit, Upload } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 
@@ -20,6 +20,69 @@ function WaxSeal({ letter, color, size = 36 }) {
     >
       {letter}
     </div>
+  );
+}
+
+function ImageField({ label, value, onChange, session, maxHeightPreview = 220 }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = useRef(null);
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !session) return;
+    setUploading(true);
+    setError("");
+    const ext = file.name.split(".").pop();
+    const path = `${session.user.id}/${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from("images").upload(path, file);
+    if (uploadError) {
+      setError("L'envoi a échoué. Réessaie.");
+    } else {
+      const { data } = supabase.storage.from("images").getPublicUrl(path);
+      onChange(data.publicUrl);
+    }
+    setUploading(false);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  return (
+    <label className="flex flex-col gap-2">
+      <span className="font-ui text-xs uppercase tracking-wider flex items-center gap-2" style={{ color: "var(--ink-light)" }}>
+        <ImageIcon size={13} />
+        {label}
+      </span>
+      <div className="flex gap-2 flex-wrap">
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Coller un lien d'image..."
+          className="flex-1 min-w-[160px] font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+          style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+        />
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading || !session}
+          className="flex items-center gap-1.5 font-ui text-xs px-4 py-3 rounded-md border whitespace-nowrap disabled:opacity-50 transition-opacity"
+          style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+        >
+          <Upload size={14} />
+          {uploading ? "Envoi..." : "Depuis mes fichiers"}
+        </button>
+        <input ref={inputRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
+      </div>
+      {error && (
+        <span className="font-ui text-xs" style={{ color: "var(--wine)" }}>
+          {error}
+        </span>
+      )}
+      {value && (
+        <div className="rounded-lg overflow-hidden border mt-1" style={{ borderColor: "var(--rule)" }}>
+          <img src={value} alt="Aperçu" className="w-full h-auto object-cover" style={{ maxHeight: maxHeightPreview }} />
+        </div>
+      )}
+    </label>
   );
 }
 
@@ -1306,24 +1369,7 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
               />
             </label>
 
-            <label className="flex flex-col gap-2">
-              <span className="font-ui text-xs uppercase tracking-wider flex items-center gap-2" style={{ color: "var(--ink-light)" }}>
-                <ImageIcon size={13} />
-                Image de couverture (optionnel)
-              </span>
-              <input
-                value={cover}
-                onChange={(e) => setCover(e.target.value)}
-                placeholder="Coller un lien d'image..."
-                className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
-                style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-              />
-              {cover && (
-                <div className="rounded-lg overflow-hidden border mt-1" style={{ borderColor: "var(--rule)" }}>
-                  <img src={cover} alt="Aperçu" className="w-full h-auto object-cover" style={{ maxHeight: 160 }} />
-                </div>
-              )}
-            </label>
+            <ImageField label="Image de couverture (optionnel)" value={cover} onChange={setCover} session={session} maxHeightPreview={160} />
           </>
         )}
 
@@ -1354,24 +1400,7 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
           />
         </label>
 
-        <label className="flex flex-col gap-2">
-          <span className="font-ui text-xs uppercase tracking-wider flex items-center gap-2" style={{ color: "var(--ink-light)" }}>
-            <ImageIcon size={13} />
-            Image d'illustration (optionnel)
-          </span>
-          <input
-            value={image}
-            onChange={(e) => setImage(e.target.value)}
-            placeholder="Coller un lien d'image..."
-            className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
-            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-          />
-          {image && (
-            <div className="rounded-lg overflow-hidden border mt-1" style={{ borderColor: "var(--rule)" }}>
-              <img src={image} alt="Aperçu" className="w-full h-auto object-cover" style={{ maxHeight: 220 }} />
-            </div>
-          )}
-        </label>
+        <ImageField label="Image d'illustration (optionnel)" value={image} onChange={setImage} session={session} />
 
         {!editingDraft && (target === "new" || target === "free") && (
           <label className="flex items-center gap-2 font-ui text-sm cursor-pointer" style={{ color: "var(--ink-light)" }}>
@@ -1545,18 +1574,7 @@ function ProfileView({ collections, draftPoems, openCollection, session, profile
               style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
             />
           </label>
-          <label className="flex flex-col gap-2">
-            <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
-              Photo de profil (lien)
-            </span>
-            <input
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              placeholder="Coller un lien d'image..."
-              className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
-              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-            />
-          </label>
+          <ImageField label="Photo de profil (optionnel)" value={avatarUrl} onChange={setAvatarUrl} session={session} maxHeightPreview={160} />
           <label className="flex flex-col gap-2">
             <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
               Bio
