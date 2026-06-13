@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 
@@ -33,60 +33,74 @@ function TopNav({ view, setView, session, profile }) {
       className="sticky top-0 z-10 border-b"
       style={{ background: "var(--paper)", borderColor: "var(--rule)" }}
     >
-      <div className="max-w-5xl mx-auto flex items-center justify-between px-6 py-4">
+      <div className="max-w-5xl mx-auto flex items-center justify-between px-4 sm:px-6 py-4 gap-2">
         <button
           onClick={() => setView("home")}
-          className="font-display italic text-2xl tracking-tight"
+          className="font-display italic text-xl sm:text-2xl tracking-tight shrink-0"
           style={{ color: "var(--ink)" }}
         >
           Dreams
         </button>
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-0.5 sm:gap-1">
           {items.map(({ key, label, icon: Icon }) => {
             const active = view === key;
             return (
               <button
                 key={key}
                 onClick={() => setView(key)}
-                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-ui transition-colors"
+                className="flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full text-sm font-ui transition-colors"
                 style={{
                   color: active ? "var(--paper-warm)" : "var(--ink)",
                   background: active ? "var(--ink)" : "transparent",
                 }}
               >
                 <Icon size={15} strokeWidth={2} />
-                {label}
+                <span className="hidden sm:inline">{label}</span>
               </button>
             );
           })}
 
+          {profile?.is_moderator && (
+            <button
+              onClick={() => setView("moderation")}
+              className="flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full text-sm font-ui transition-colors"
+              style={{
+                color: view === "moderation" ? "var(--paper-warm)" : "var(--ink)",
+                background: view === "moderation" ? "var(--ink)" : "transparent",
+              }}
+            >
+              <ShieldCheck size={15} strokeWidth={2} />
+              <span className="hidden sm:inline">Modération</span>
+            </button>
+          )}
+
           {session ? (
             <button
               onClick={() => setView("profile")}
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-ui transition-colors"
+              className="flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full text-sm font-ui transition-colors max-w-[7rem] sm:max-w-none"
               style={{
                 color: view === "profile" ? "var(--paper-warm)" : "var(--ink)",
                 background: view === "profile" ? "var(--ink)" : "transparent",
               }}
             >
               {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" />
+                <img src={profile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
               ) : (
-                <User size={15} strokeWidth={2} />
+                <User size={15} strokeWidth={2} className="shrink-0" />
               )}
-              {profile?.username || "Profil"}
+              <span className="truncate">{profile?.username || "Profil"}</span>
             </button>
           ) : (
             <button
               onClick={() => setView("auth")}
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-ui transition-colors"
+              className="flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full text-sm font-ui transition-colors"
               style={{
                 color: view === "auth" ? "var(--paper-warm)" : "var(--ink)",
                 background: view === "auth" ? "var(--ink)" : "transparent",
               }}
             >
               <LogIn size={15} strokeWidth={2} />
-              Connexion
+              <span className="hidden sm:inline">Connexion</span>
             </button>
           )}
         </nav>
@@ -96,6 +110,8 @@ function TopNav({ view, setView, session, profile }) {
 }
 
 function HomeView({ collections, topLiked, openCollection }) {
+  const [query, setQuery] = useState("");
+
   if (collections.length === 0) {
     return (
       <div className="max-w-5xl mx-auto px-6 py-24 text-center">
@@ -105,6 +121,16 @@ function HomeView({ collections, topLiked, openCollection }) {
       </div>
     );
   }
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? collections.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.author.toLowerCase().includes(q) ||
+          c.theme.toLowerCase().includes(q)
+      )
+    : collections;
 
   const featured = collections[0];
   const featuredPoem = featured.poems[0];
@@ -185,52 +211,68 @@ function HomeView({ collections, topLiked, openCollection }) {
 
       {/* Collections grid */}
       <section className="py-14">
-        <div className="flex items-baseline justify-between mb-8">
+        <div className="flex items-baseline justify-between mb-6 gap-4 flex-wrap">
           <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
             Nouveaux recueils
           </h2>
           <p className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
-            {collections.length} publiés
+            {filtered.length} / {collections.length} publiés
           </p>
         </div>
-        <div className="grid sm:grid-cols-2 gap-5">
-          {collections.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => openCollection(c, 0)}
-              className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm group"
-              style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <WaxSeal letter={c.seal} color={c.sealColor} />
-                <span
-                  className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded-full"
-                  style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}
-                >
-                  {c.theme}
-                </span>
-              </div>
-              <h3
-                className="font-display italic text-xl mb-1 transition-colors"
-                style={{ color: "var(--ink)" }}
-              >
-                {c.title}
-              </h3>
-              <p className="font-ui text-sm mb-4" style={{ color: "var(--ink-light)" }}>
-                {c.author} · {c.poems.length} poèmes
-              </p>
-              <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
-                « {c.poems[0].lines.find((l) => l)} »
-              </p>
-            </button>
-          ))}
+        <div className="relative mb-8">
+          <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: "var(--ink-light)" }} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Chercher par titre, auteur ou thème..."
+            className="w-full font-ui text-sm pl-10 pr-4 py-3 rounded-full border bg-transparent outline-none focus:ring-1"
+            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+          />
         </div>
+        {filtered.length === 0 ? (
+          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+            Aucun recueil ne correspond à « {query} ».
+          </p>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-5">
+            {filtered.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => openCollection(c, 0)}
+                className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm group"
+                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <WaxSeal letter={c.seal} color={c.sealColor} />
+                  <span
+                    className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded-full"
+                    style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}
+                  >
+                    {c.theme}
+                  </span>
+                </div>
+                <h3
+                  className="font-display italic text-xl mb-1 transition-colors"
+                  style={{ color: "var(--ink)" }}
+                >
+                  {c.title}
+                </h3>
+                <p className="font-ui text-sm mb-4" style={{ color: "var(--ink-light)" }}>
+                  {c.author} · {c.poems.length} poèmes
+                </p>
+                <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                  « {c.poems[0].lines.find((l) => l)} »
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
 }
 
-function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
+function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profile, refresh, onDeleted }) {
   const poem = collection.poems[poemIndex];
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(poem.likes_count);
@@ -238,11 +280,20 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
   const [comments, setComments] = useState([]);
   const [draft, setDraft] = useState("");
   const [commentAnon, setCommentAnon] = useState(false);
+  const [ratings, setRatings] = useState([]);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [poemReported, setPoemReported] = useState(false);
+  const [commentError, setCommentError] = useState("");
+
+  const canManage = session && (profile?.is_moderator || collection.author_id === session.user.id);
 
   // Reset/load per-poem state whenever the displayed poem changes
   useEffect(() => {
     setLikesCount(poem.likes_count);
     setLiked(localStorage.getItem(`liked_${poem.id}`) === "1");
+    setShareCopied(false);
+    setPoemReported(false);
+    setCommentError("");
 
     let active = true;
     supabase
@@ -253,10 +304,32 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
       .then(({ data, error }) => {
         if (active && !error && data) setComments(data);
       });
+    supabase
+      .from("ratings")
+      .select("*")
+      .eq("poem_id", poem.id)
+      .then(({ data, error }) => {
+        if (active && !error && data) setRatings(data);
+      });
     return () => {
       active = false;
     };
   }, [poem.id]);
+
+  const avgRating = ratings.length ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length : 0;
+  const userRating = ratings.find((r) => r.user_id === session?.user?.id)?.rating || 0;
+
+  const handleRate = async (value) => {
+    if (!session) return;
+    const { data, error } = await supabase
+      .from("ratings")
+      .upsert({ poem_id: poem.id, user_id: session.user.id, rating: value }, { onConflict: "poem_id,user_id" })
+      .select()
+      .single();
+    if (!error && data) {
+      setRatings((prev) => [...prev.filter((r) => r.user_id !== session.user.id), data]);
+    }
+  };
 
   const toggleLike = async () => {
     const next = !liked;
@@ -270,8 +343,62 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
       .eq("id", poem.id);
   };
 
+  const handleShare = async () => {
+    const url = `${window.location.origin}${window.location.pathname}?poem=${poem.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable, ignore silently
+    }
+  };
+
+  const handleReportPoem = async () => {
+    await supabase.from("reports").insert({ target_type: "poem", target_id: poem.id, reason: "Signalé depuis la lecture" });
+    setPoemReported(true);
+  };
+
+  const handleReportComment = async (commentId) => {
+    await supabase.from("reports").insert({ target_type: "comment", target_id: commentId, reason: "Signalé depuis la lecture" });
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (!window.confirm("Supprimer ce commentaire ?")) return;
+    const { error } = await supabase.from("comments").delete().eq("id", commentId);
+    if (!error) setComments((prev) => prev.filter((c) => c.id !== commentId));
+  };
+
+  const handleDeletePoem = async () => {
+    if (!window.confirm(`Supprimer le poème « ${poem.title} » ?`)) return;
+    if (collection.poems.length === 1) {
+      // Last poem: delete the whole collection
+      await supabase.from("collections").delete().eq("id", collection.id);
+      await refresh();
+      onDeleted();
+      return;
+    }
+    await supabase.from("poems").delete().eq("id", poem.id);
+    await refresh();
+    if (poemIndex >= collection.poems.length - 1) setPoemIndex(Math.max(0, poemIndex - 1));
+  };
+
+  const handleDeleteCollection = async () => {
+    if (!window.confirm(`Supprimer tout le recueil « ${collection.title} » et ses ${collection.poems.length} poèmes ?`)) return;
+    await supabase.from("collections").delete().eq("id", collection.id);
+    await refresh();
+    onDeleted();
+  };
+
   const submitComment = async () => {
     if (!draft.trim()) return;
+    const lastTime = parseInt(localStorage.getItem("last_comment_time") || "0", 10);
+    const elapsed = Date.now() - lastTime;
+    if (elapsed < 30000) {
+      setCommentError(`Attends encore ${Math.ceil((30000 - elapsed) / 1000)}s avant de publier un nouveau commentaire.`);
+      return;
+    }
+    setCommentError("");
     const newComment = {
       poem_id: poem.id,
       author: commentAnon ? null : "Vous",
@@ -282,6 +409,7 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
     if (!error && data) {
       setComments((prev) => [...prev, data]);
       setDraft("");
+      localStorage.setItem("last_comment_time", String(Date.now()));
     }
   };
 
@@ -334,9 +462,56 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
 
         {/* Poem reader */}
         <article>
-          <h1 className="font-display italic mb-6" style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)", color: "var(--ink)" }}>
-            {poem.title}
-          </h1>
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <h1 className="font-display italic" style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)", color: "var(--ink)" }}>
+              {poem.title}
+            </h1>
+            <div className="flex items-center gap-2 shrink-0 pt-2">
+              <button
+                onClick={handleShare}
+                title="Copier le lien de ce poème"
+                className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
+                style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
+              >
+                <Share2 size={13} />
+                {shareCopied ? "Lien copié" : "Partager"}
+              </button>
+              {!canManage && (
+                <button
+                  onClick={handleReportPoem}
+                  disabled={poemReported}
+                  title="Signaler ce poème"
+                  className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors disabled:opacity-40"
+                  style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
+                >
+                  <Flag size={13} />
+                  {poemReported ? "Signalé" : "Signaler"}
+                </button>
+              )}
+              {canManage && (
+                <>
+                  <button
+                    onClick={handleDeletePoem}
+                    title="Supprimer ce poème"
+                    className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
+                    style={{ borderColor: "var(--rule)", color: "var(--wine)" }}
+                  >
+                    <Trash2 size={13} />
+                    Poème
+                  </button>
+                  <button
+                    onClick={handleDeleteCollection}
+                    title="Supprimer tout le recueil"
+                    className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
+                    style={{ borderColor: "var(--rule)", color: "var(--wine)" }}
+                  >
+                    <Trash2 size={13} />
+                    Recueil
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
 
           {poem.image_url && (
             <div className="mb-8 rounded-lg overflow-hidden border" style={{ borderColor: "var(--rule)" }}>
@@ -412,6 +587,41 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
             </div>
           </div>
 
+          {/* Rating */}
+          <div className="flex items-center gap-5 mt-4 flex-wrap">
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Star
+                  key={i}
+                  size={14}
+                  fill={i <= Math.round(avgRating) ? "var(--wine)" : "none"}
+                  stroke="var(--wine)"
+                  strokeWidth={1.5}
+                />
+              ))}
+              <span className="font-mono text-xs ml-1" style={{ color: "var(--ink-light)" }}>
+                {ratings.length > 0 ? `${avgRating.toFixed(1)} (${ratings.length})` : "Pas encore noté"}
+              </span>
+            </div>
+
+            {session ? (
+              <div className="flex items-center gap-1">
+                <span className="font-ui text-xs mr-1" style={{ color: "var(--ink-light)" }}>
+                  Votre note :
+                </span>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <button key={i} onClick={() => handleRate(i)} className="transition-transform hover:scale-110">
+                    <Star size={14} fill={i <= userRating ? "var(--wine)" : "none"} stroke="var(--wine)" strokeWidth={1.5} />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                Connecte-toi pour noter ce poème
+              </span>
+            )}
+          </div>
+
           {/* Comments */}
           <div className="mt-10 pt-8 border-t" style={{ borderColor: "var(--rule)" }}>
             <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>
@@ -421,19 +631,31 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
 
             <div className="flex flex-col gap-4 mb-6">
               {comments.map((c) => (
-                <div key={c.id} className="flex gap-3">
+                <div key={c.id} className="flex gap-3 group">
                   <WaxSeal
                     letter={c.anonymous ? "?" : c.author.charAt(0)}
                     color={c.anonymous ? "var(--ink-light)" : "var(--sage)"}
                     size={28}
                   />
-                  <div>
+                  <div className="flex-1">
                     <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
                       {c.anonymous ? "Anonyme" : c.author}
                     </p>
                     <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
                       {c.content}
                     </p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    {!profile?.is_moderator && (
+                      <button onClick={() => handleReportComment(c.id)} title="Signaler ce commentaire">
+                        <Flag size={13} style={{ color: "var(--ink-light)" }} />
+                      </button>
+                    )}
+                    {profile?.is_moderator && (
+                      <button onClick={() => handleDeleteComment(c.id)} title="Supprimer ce commentaire">
+                        <Trash2 size={13} style={{ color: "var(--wine)" }} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -446,6 +668,11 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
 
             {/* New comment */}
             <div className="flex flex-col gap-3">
+              {commentError && (
+                <p className="font-ui text-xs" style={{ color: "var(--wine)" }}>
+                  {commentError}
+                </p>
+              )}
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -614,7 +841,11 @@ function AuthView({ onSuccess }) {
   );
 }
 
-function WriteView({ session, profile, goToAuth, onPublished }) {
+function WriteView({ session, profile, collections, goToAuth, onPublished }) {
+  const myCollections = (collections || []).filter((c) => c.author_id === session?.user?.id);
+
+  const [target, setTarget] = useState("new"); // "new" | "existing"
+  const [existingId, setExistingId] = useState(myCollections[0]?.id || "");
   const [title, setTitle] = useState("");
   const [theme, setTheme] = useState("");
   const [poemTitle, setPoemTitle] = useState("");
@@ -628,41 +859,49 @@ function WriteView({ session, profile, goToAuth, onPublished }) {
     setSubmitting(true);
     setErrorMsg("");
 
-    const authorName = anonymous ? "Anonyme" : profile?.username || "Anonyme";
-    const seal = authorName.charAt(0).toUpperCase();
-    const sealColor = SEAL_COLORS[Math.floor(Math.random() * SEAL_COLORS.length)];
+    let collectionId = existingId;
 
-    const { data: col, error: colError } = await supabase
-      .from("collections")
-      .insert({
-        title: title.trim(),
-        author: authorName,
-        author_id: session.user.id,
-        theme: theme.trim() || "Inédit",
-        seal,
-        seal_color: sealColor,
-      })
-      .select()
-      .single();
+    if (target === "new") {
+      const authorName = anonymous ? "Anonyme" : profile?.username || "Anonyme";
+      const seal = authorName.charAt(0).toUpperCase();
+      const sealColor = SEAL_COLORS[Math.floor(Math.random() * SEAL_COLORS.length)];
 
-    if (colError || !col) {
-      setErrorMsg("Impossible de publier le recueil. Réessaie dans un instant.");
-      setSubmitting(false);
-      return;
+      const { data: col, error: colError } = await supabase
+        .from("collections")
+        .insert({
+          title: title.trim(),
+          author: authorName,
+          author_id: session.user.id,
+          theme: theme.trim() || "Inédit",
+          seal,
+          seal_color: sealColor,
+        })
+        .select()
+        .single();
+
+      if (colError || !col) {
+        setErrorMsg("Impossible de publier le recueil. Réessaie dans un instant.");
+        setSubmitting(false);
+        return;
+      }
+      collectionId = col.id;
     }
 
+    const targetCollection = myCollections.find((c) => c.id === collectionId);
+    const position = target === "existing" && targetCollection ? targetCollection.poems.length : 0;
+
     const { error: poemError } = await supabase.from("poems").insert({
-      collection_id: col.id,
+      collection_id: collectionId,
       title: poemTitle.trim(),
       content: text,
       image_url: image.trim() || null,
-      position: 0,
+      position,
     });
 
     setSubmitting(false);
 
     if (poemError) {
-      setErrorMsg("Le recueil a été créé, mais le poème n'a pas pu être ajouté. Réessaie.");
+      setErrorMsg("Le poème n'a pas pu être ajouté. Réessaie.");
       return;
     }
 
@@ -702,31 +941,80 @@ function WriteView({ session, profile, goToAuth, onPublished }) {
       </h1>
 
       <div className="flex flex-col gap-6">
-        <label className="flex flex-col gap-2">
-          <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
-            Titre du recueil
-          </span>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ex. Saisons obliques"
-            className="font-display italic text-xl px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
-            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-          />
-        </label>
+        {myCollections.length > 0 && (
+          <div className="flex items-center gap-2 p-1 rounded-full border self-start" style={{ borderColor: "var(--rule)" }}>
+            <button
+              onClick={() => setTarget("new")}
+              className="font-ui text-xs px-4 py-2 rounded-full transition-colors"
+              style={{
+                background: target === "new" ? "var(--ink)" : "transparent",
+                color: target === "new" ? "var(--paper-warm)" : "var(--ink-light)",
+              }}
+            >
+              Nouveau recueil
+            </button>
+            <button
+              onClick={() => setTarget("existing")}
+              className="font-ui text-xs px-4 py-2 rounded-full transition-colors"
+              style={{
+                background: target === "existing" ? "var(--ink)" : "transparent",
+                color: target === "existing" ? "var(--paper-warm)" : "var(--ink-light)",
+              }}
+            >
+              Ajouter à un recueil existant
+            </button>
+          </div>
+        )}
 
-        <label className="flex flex-col gap-2">
-          <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
-            Thème (optionnel)
-          </span>
-          <input
-            value={theme}
-            onChange={(e) => setTheme(e.target.value)}
-            placeholder="Ex. Nature & solitude"
-            className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
-            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-          />
-        </label>
+        {target === "existing" && myCollections.length > 0 && (
+          <label className="flex flex-col gap-2">
+            <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+              Recueil
+            </span>
+            <select
+              value={existingId}
+              onChange={(e) => setExistingId(Number(e.target.value))}
+              className="font-display italic text-lg px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+            >
+              {myCollections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title} ({c.poems.length} poème{c.poems.length === 1 ? "" : "s"})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {target === "new" && (
+          <>
+            <label className="flex flex-col gap-2">
+              <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+                Titre du recueil
+              </span>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ex. Saisons obliques"
+                className="font-display italic text-xl px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+                style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              />
+            </label>
+
+            <label className="flex flex-col gap-2">
+              <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+                Thème (optionnel)
+              </span>
+              <input
+                value={theme}
+                onChange={(e) => setTheme(e.target.value)}
+                placeholder="Ex. Nature & solitude"
+                className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+                style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              />
+            </label>
+          </>
+        )}
 
         <label className="flex flex-col gap-2">
           <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
@@ -774,24 +1062,26 @@ function WriteView({ session, profile, goToAuth, onPublished }) {
           )}
         </label>
 
-        <label className="flex items-center gap-2 font-ui text-sm cursor-pointer" style={{ color: "var(--ink-light)" }}>
-          <input
-            type="checkbox"
-            checked={anonymous}
-            onChange={(e) => setAnonymous(e.target.checked)}
-            className="accent-[var(--ink)]"
-          />
-          <EyeOff size={14} />
-          Publier en anonyme
-          <span className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-            — votre nom n'apparaîtra pas, seulement « Anonyme »
-          </span>
-        </label>
+        {target === "new" && (
+          <label className="flex items-center gap-2 font-ui text-sm cursor-pointer" style={{ color: "var(--ink-light)" }}>
+            <input
+              type="checkbox"
+              checked={anonymous}
+              onChange={(e) => setAnonymous(e.target.checked)}
+              className="accent-[var(--ink)]"
+            />
+            <EyeOff size={14} />
+            Publier en anonyme
+            <span className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+              — votre nom n'apparaîtra pas, seulement « Anonyme »
+            </span>
+          </label>
+        )}
 
         <div className="flex items-center gap-3 pt-2">
           <button
             onClick={handlePublish}
-            disabled={!title.trim() || !poemTitle.trim() || !text.trim() || submitting}
+            disabled={(target === "new" && !title.trim()) || !poemTitle.trim() || !text.trim() || submitting}
             className="font-ui text-sm px-6 py-3 rounded-full disabled:opacity-30 transition-opacity"
             style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
           >
@@ -1013,6 +1303,181 @@ function ProfileView({ collections, openCollection, session, profile, setProfile
   );
 }
 
+function SideSnow() {
+  const flakes = Array.from({ length: 12 }, (_, i) => ({
+    side: i % 2 === 0 ? "left" : "right",
+    offset: 1 + ((i * 3) % 9),
+    size: 2 + (i % 3),
+    duration: 32 + (i % 6) * 6,
+    delay: -(i * 4.5),
+    opacity: 0.18 + (i % 3) * 0.08,
+  }));
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
+      {flakes.map((f, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            [f.side]: `${f.offset}%`,
+            top: "-4%",
+            width: f.size,
+            height: f.size,
+            background: "#FFFFFF",
+            opacity: f.opacity,
+            animation: `snowfall ${f.duration}s linear infinite`,
+            animationDelay: `${f.delay}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ModerationView({ collections, refresh }) {
+  const [reports, setReports] = useState([]);
+  const [commentsMap, setCommentsMap] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from("reports").select("*").order("created_at", { ascending: false });
+      const list = data || [];
+      setReports(list);
+
+      const commentIds = list.filter((r) => r.target_type === "comment").map((r) => r.target_id);
+      if (commentIds.length) {
+        const { data: cs } = await supabase.from("comments").select("*").in("id", commentIds);
+        const map = {};
+        (cs || []).forEach((c) => {
+          map[c.id] = c;
+        });
+        setCommentsMap(map);
+      }
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const allPoems = collections.flatMap((c) => c.poems.map((p) => ({ ...p, collection: c })));
+
+  const dismiss = async (reportId) => {
+    await supabase.from("reports").delete().eq("id", reportId);
+    setReports((prev) => prev.filter((r) => r.id !== reportId));
+  };
+
+  const deleteTarget = async (report) => {
+    if (report.target_type === "poem") {
+      const poem = allPoems.find((p) => p.id === report.target_id);
+      if (!window.confirm(`Supprimer le poème « ${poem?.title || report.target_id} » ?`)) return;
+      await supabase.from("poems").delete().eq("id", report.target_id);
+      await refresh();
+    } else {
+      if (!window.confirm("Supprimer ce commentaire ?")) return;
+      await supabase.from("comments").delete().eq("id", report.target_id);
+    }
+    await dismiss(report.id);
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-24 text-center">
+        <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>
+          Chargement des signalements...
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-12">
+      <p className="flex items-center gap-2 font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
+        <ShieldCheck size={14} />
+        Modération
+      </p>
+      <h1 className="font-display italic text-3xl mb-10" style={{ color: "var(--ink)" }}>
+        Signalements
+      </h1>
+
+      {reports.length === 0 ? (
+        <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+          Aucun signalement en attente.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {reports.map((r) => {
+            const poem = r.target_type === "poem" ? allPoems.find((p) => p.id === r.target_id) : null;
+            const comment = r.target_type === "comment" ? commentsMap[r.target_id] : null;
+            return (
+              <div key={r.id} className="p-5 rounded-lg border" style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded-full" style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}>
+                    {r.target_type === "poem" ? "Poème" : "Commentaire"}
+                  </span>
+                  <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+                    {new Date(r.created_at).toLocaleDateString("fr-FR")}
+                  </span>
+                </div>
+
+                {r.target_type === "poem" && (
+                  poem ? (
+                    <p className="font-display italic text-base mb-1" style={{ color: "var(--ink)" }}>
+                      {poem.title}
+                      <span className="font-ui text-xs not-italic ml-2" style={{ color: "var(--ink-light)" }}>
+                        — {poem.collection.title}, {poem.collection.author}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+                      Contenu déjà supprimé.
+                    </p>
+                  )
+                )}
+
+                {r.target_type === "comment" && (
+                  comment ? (
+                    <p className="font-ui text-sm mb-1" style={{ color: "var(--ink)" }}>
+                      « {comment.content} »
+                      <span className="font-ui text-xs ml-2" style={{ color: "var(--ink-light)" }}>
+                        — {comment.anonymous ? "Anonyme" : comment.author}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+                      Contenu déjà supprimé.
+                    </p>
+                  )
+                )}
+
+                <div className="flex items-center gap-3 mt-3">
+                  {(poem || comment) && (
+                    <button
+                      onClick={() => deleteTarget(r)}
+                      className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
+                      style={{ borderColor: "var(--rule)", color: "var(--wine)" }}
+                    >
+                      <Trash2 size={13} />
+                      Supprimer le contenu
+                    </button>
+                  )}
+                  <button
+                    onClick={() => dismiss(r.id)}
+                    className="flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full border transition-colors"
+                    style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
+                  >
+                    <X size={13} />
+                    Rejeter le signalement
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState("home");
   const [collections, setCollections] = useState([]);
@@ -1077,6 +1542,26 @@ export default function App() {
     loadCollections();
   }, []);
 
+  const deepLinkHandled = useRef(false);
+
+  // Open a poem directly if the URL contains ?poem=ID (for shared links)
+  useEffect(() => {
+    if (collections.length === 0 || deepLinkHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const poemId = params.get("poem");
+    if (!poemId) return;
+    deepLinkHandled.current = true;
+    for (const c of collections) {
+      const idx = c.poems.findIndex((p) => String(p.id) === poemId);
+      if (idx !== -1) {
+        setCollection(c);
+        setPoemIndex(idx);
+        setView("reader");
+        break;
+      }
+    }
+  }, [collections]);
+
   const openCollection = (c, i) => {
     setCollection(c);
     setPoemIndex(i);
@@ -1085,7 +1570,7 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen relative overflow-hidden"
       style={{
         "--paper": "#EAE6DC",
         "--paper-warm": "#F7F3EA",
@@ -1104,7 +1589,14 @@ export default function App() {
         .font-ui { font-family: 'Inter', sans-serif; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
         input:focus, textarea:focus { ring-color: var(--wine); }
+
+        @keyframes snowfall {
+          0% { transform: translateY(-6vh); }
+          100% { transform: translateY(106vh); }
+        }
       `}</style>
+
+      <SideSnow />
 
       <div className="relative" style={{ zIndex: 1 }}>
         <TopNav view={view} setView={setView} session={session} profile={profile} />
@@ -1116,12 +1608,17 @@ export default function App() {
             poemIndex={poemIndex}
             setPoemIndex={setPoemIndex}
             back={() => setView("home")}
+            session={session}
+            profile={profile}
+            refresh={loadCollections}
+            onDeleted={() => setView("home")}
           />
         )}
         {view === "write" && (
           <WriteView
             session={session}
             profile={profile}
+            collections={collections}
             goToAuth={() => setView("auth")}
             onPublished={async () => { await loadCollections(); setView("home"); }}
           />
@@ -1140,6 +1637,9 @@ export default function App() {
           <AuthView
             onSuccess={() => setView("profile")}
           />
+        )}
+        {view === "moderation" && profile?.is_moderator && (
+          <ModerationView collections={collections} refresh={loadCollections} />
         )}
       </div>
     </div>
