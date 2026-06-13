@@ -466,6 +466,7 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
   const [draft, setDraft] = useState("");
   const [commentAnon, setCommentAnon] = useState(false);
   const [ratings, setRatings] = useState([]);
+  const [hoverRating, setHoverRating] = useState(0);
   const [shareCopied, setShareCopied] = useState(false);
   const [poemReported, setPoemReported] = useState(false);
   const [commentError, setCommentError] = useState("");
@@ -506,6 +507,10 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
 
   const handleRate = async (value) => {
     if (!session) return;
+    setRatings((prev) => [
+      ...prev.filter((r) => r.user_id !== session.user.id),
+      { poem_id: poem.id, user_id: session.user.id, rating: value },
+    ]);
     const { data, error } = await supabase
       .from("ratings")
       .upsert({ poem_id: poem.id, user_id: session.user.id, rating: value }, { onConflict: "poem_id,user_id" })
@@ -876,35 +881,60 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
           </div>
 
           {/* Rating */}
-          <div className="flex items-center gap-5 mt-4 flex-wrap">
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Star
-                  key={i}
-                  size={14}
-                  fill={i <= Math.round(avgRating) ? "var(--wine)" : "none"}
-                  stroke="var(--wine)"
-                  strokeWidth={1.5}
-                />
-              ))}
-              <span className="font-mono text-xs ml-1" style={{ color: "var(--ink-light)" }}>
-                {ratings.length > 0 ? `${avgRating.toFixed(1)} (${ratings.length})` : "Pas encore noté"}
-              </span>
+          <div
+            className="flex items-center justify-between gap-6 mt-6 p-5 rounded-lg border flex-wrap"
+            style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}
+          >
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.2em] mb-2" style={{ color: "var(--sage)" }}>
+                Note moyenne
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Star
+                      key={i}
+                      size={24}
+                      fill={i <= Math.round(avgRating) ? "var(--wine)" : "none"}
+                      stroke="var(--wine)"
+                      strokeWidth={1.5}
+                    />
+                  ))}
+                </div>
+                <span className="font-display italic text-xl" style={{ color: "var(--ink)" }}>
+                  {ratings.length > 0 ? avgRating.toFixed(1) : "—"}
+                </span>
+                <span className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                  {ratings.length > 0 ? `(${ratings.length} avis)` : "Pas encore noté"}
+                </span>
+              </div>
             </div>
 
             {session ? (
-              <div className="flex items-center gap-1">
-                <span className="font-ui text-xs mr-1" style={{ color: "var(--ink-light)" }}>
-                  Votre note :
-                </span>
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <button key={i} onClick={() => handleRate(i)} className="transition-transform hover:scale-110">
-                    <Star size={14} fill={i <= userRating ? "var(--wine)" : "none"} stroke="var(--wine)" strokeWidth={1.5} />
-                  </button>
-                ))}
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.2em] mb-2 sm:text-right" style={{ color: "var(--sage)" }}>
+                  Votre note
+                </p>
+                <div className="flex items-center gap-1" onMouseLeave={() => setHoverRating(0)}>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleRate(i)}
+                      onMouseEnter={() => setHoverRating(i)}
+                      className="transition-transform hover:scale-110"
+                    >
+                      <Star
+                        size={30}
+                        fill={i <= (hoverRating || userRating) ? "var(--wine)" : "none"}
+                        stroke="var(--wine)"
+                        strokeWidth={1.5}
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
-              <span className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+              <span className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
                 Connecte-toi pour noter ce poème
               </span>
             )}
