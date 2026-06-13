@@ -31,8 +31,8 @@ function TopNav({ view, setView }) {
   ];
   return (
     <header
-      className="sticky top-0 z-10 border-b"
-      style={{ background: "var(--paper)", borderColor: "var(--rule)" }}
+      className="sticky top-0 z-10 border-b backdrop-blur-md"
+      style={{ background: "rgba(234, 244, 253, 0.7)", borderColor: "var(--rule)" }}
     >
       <div className="max-w-5xl mx-auto flex items-center justify-between px-6 py-4">
         <button
@@ -454,7 +454,7 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
   );
 }
 
-const SEAL_COLORS = ["#8B3A4A", "#6E7F5C", "#7C8194"];
+const SEAL_COLORS = ["#6FA3D8", "#9FC1E8", "#7B93B5"];
 
 function WriteView({ onPublished }) {
   const [author, setAuthor] = useState("");
@@ -687,6 +687,67 @@ function ProfileView({ collections, openCollection }) {
   );
 }
 
+function CloudLayer() {
+  const clouds = [
+    { top: "6%", left: "-8%", size: 320, duration: 95, delay: 0, opacity: 0.55 },
+    { top: "16%", left: "62%", size: 220, duration: 120, delay: -40, opacity: 0.45 },
+    { top: "46%", left: "18%", size: 360, duration: 140, delay: -70, opacity: 0.35 },
+    { top: "72%", left: "68%", size: 260, duration: 105, delay: -20, opacity: 0.4 },
+    { top: "85%", left: "-5%", size: 280, duration: 130, delay: -55, opacity: 0.35 },
+  ];
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
+      {clouds.map((c, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            top: c.top,
+            left: c.left,
+            width: c.size,
+            height: c.size * 0.5,
+            background: "#FFFFFF",
+            filter: "blur(40px)",
+            opacity: c.opacity,
+            animation: `drift ${c.duration}s ease-in-out infinite`,
+            animationDelay: `${c.delay}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Snow() {
+  const flakes = Array.from({ length: 18 }, (_, i) => ({
+    left: (i * 53.7) % 100,
+    size: 2 + (i % 3),
+    duration: 22 + (i % 5) * 5,
+    delay: -(i * 2.3),
+    opacity: 0.3 + (i % 3) * 0.15,
+  }));
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
+      {flakes.map((f, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            left: `${f.left}%`,
+            top: "-4%",
+            width: f.size,
+            height: f.size,
+            background: "#FFFFFF",
+            opacity: f.opacity,
+            animation: `snowfall ${f.duration}s linear infinite`,
+            animationDelay: `${f.delay}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState("home");
   const [collections, setCollections] = useState([]);
@@ -736,15 +797,15 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen relative overflow-hidden"
       style={{
-        "--paper": "#EAE6DC",
-        "--paper-warm": "#F7F3EA",
-        "--ink": "#262C40",
-        "--ink-light": "#7C8194",
-        "--wine": "#8B3A4A",
-        "--sage": "#6E7F5C",
-        "--rule": "#DAD4C6",
+        "--paper": "#EAF4FD",
+        "--paper-warm": "#FFFFFF",
+        "--ink": "#34465E",
+        "--ink-light": "#9AB0CC",
+        "--wine": "#6FA3D8",
+        "--sage": "#BFD6EF",
+        "--rule": "#DFEBFA",
         background: "var(--paper)",
         fontFamily: "Inter, sans-serif",
       }}
@@ -755,21 +816,35 @@ export default function App() {
         .font-ui { font-family: 'Inter', sans-serif; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
         input:focus, textarea:focus { ring-color: var(--wine); }
+
+        @keyframes drift {
+          0%, 100% { transform: translateX(0) translateY(0); }
+          50% { transform: translateX(36px) translateY(-12px); }
+        }
+        @keyframes snowfall {
+          0% { transform: translateY(-6vh) translateX(0); }
+          100% { transform: translateY(106vh) translateX(24px); }
+        }
       `}</style>
 
-      <TopNav view={view} setView={setView} />
+      <CloudLayer />
+      <Snow />
 
-      {view === "home" && <HomeView collections={collections} topLiked={topLiked} openCollection={openCollection} />}
-      {view === "reader" && collection && (
-        <ReaderView
-          collection={collection}
-          poemIndex={poemIndex}
-          setPoemIndex={setPoemIndex}
-          back={() => setView("home")}
-        />
-      )}
-      {view === "write" && <WriteView onPublished={async () => { await loadCollections(); setView("home"); }} />}
-      {view === "profile" && <ProfileView collections={collections} openCollection={openCollection} />}
+      <div className="relative" style={{ zIndex: 1 }}>
+        <TopNav view={view} setView={setView} />
+
+        {view === "home" && <HomeView collections={collections} topLiked={topLiked} openCollection={openCollection} />}
+        {view === "reader" && collection && (
+          <ReaderView
+            collection={collection}
+            poemIndex={poemIndex}
+            setPoemIndex={setPoemIndex}
+            back={() => setView("home")}
+          />
+        )}
+        {view === "write" && <WriteView onPublished={async () => { await loadCollections(); setView("home"); }} />}
+        {view === "profile" && <ProfileView collections={collections} openCollection={openCollection} />}
+      </div>
     </div>
   );
 }
