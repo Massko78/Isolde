@@ -287,35 +287,38 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
           </div>
           <div className="grid sm:grid-cols-2 gap-5">
             {topLiked.map((p) => {
-              const idx = p.collection.poems.findIndex((x) => x.id === p.id);
+              const idx = p.collection ? p.collection.poems.findIndex((x) => x.id === p.id) : 0;
+              const seal = p.collection ? p.collection.seal : (p.author || "?").charAt(0).toUpperCase();
+              const sealColor = p.collection ? p.collection.sealColor : "#8B3A4A";
+              const authorAvatar = p.collection ? p.collection.authorAvatar : p.authorAvatar;
               return (
                 <button
                   key={p.id}
-                  onClick={() => openCollection(p.collection, idx)}
+                  onClick={() => (p.collection ? openCollection(p.collection, idx) : openFreePoem(p))}
                   className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm flex items-center justify-between gap-4"
                   style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
                 >
                   <div className="flex items-center gap-4">
-                    <AuthorBadge avatarUrl={p.collection.authorAvatar} letter={p.collection.seal} color={p.collection.sealColor} />
+                    <AuthorBadge avatarUrl={authorAvatar} letter={seal} color={sealColor} />
                     <div>
                       <h3 className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
                         {p.title}
                       </h3>
                       <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                        {p.collection.title} ·{" "}
-                        {p.collection.author_id ? (
+                        {p.collection ? p.collection.title : "Poème libre"} ·{" "}
+                        {(p.collection ? p.collection.author_id : p.author_id) ? (
                           <span
                             role="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              goToAuthor(p.collection.author_id);
+                              goToAuthor(p.collection ? p.collection.author_id : p.author_id);
                             }}
                             className="hover:underline"
                           >
-                            {p.collection.author}
+                            {p.collection ? p.collection.author : p.author}
                           </span>
                         ) : (
-                          p.collection.author
+                          p.collection ? p.collection.author : p.author
                         )}
                       </p>
                     </div>
