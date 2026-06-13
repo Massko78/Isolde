@@ -1,6 +1,6 @@
-# Vers — prototype
+# Dreams — prototype
 
-Plateforme de recueils de poèmes (prototype). Construit avec React + Vite + Tailwind.
+Plateforme de recueils de poèmes (prototype). Construit avec React + Vite + Tailwind + Supabase.
 
 ## Mettre ce projet sur GitHub
 

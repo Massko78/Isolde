@@ -40,7 +40,7 @@ function TopNav({ view, setView }) {
           className="font-display italic text-2xl tracking-tight"
           style={{ color: "var(--ink)" }}
         >
-          Vers
+          Dreams
         </button>
         <nav className="flex items-center gap-1">
           {items.map(({ key, label, icon: Icon }) => {
@@ -413,13 +413,62 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back }) {
   );
 }
 
-function WriteView() {
+const SEAL_COLORS = ["#8B3A4A", "#6E7F5C", "#7C8194"];
+
+function WriteView({ onPublished }) {
+  const [author, setAuthor] = useState("");
   const [title, setTitle] = useState("");
+  const [theme, setTheme] = useState("");
   const [poemTitle, setPoemTitle] = useState("");
   const [text, setText] = useState("");
   const [image, setImage] = useState("");
   const [anonymous, setAnonymous] = useState(false);
-  const [published, setPublished] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handlePublish = async () => {
+    setSubmitting(true);
+    setErrorMsg("");
+
+    const authorName = anonymous ? "Anonyme" : author.trim() || "Anonyme";
+    const seal = authorName.charAt(0).toUpperCase();
+    const sealColor = SEAL_COLORS[Math.floor(Math.random() * SEAL_COLORS.length)];
+
+    const { data: col, error: colError } = await supabase
+      .from("collections")
+      .insert({
+        title: title.trim(),
+        author: authorName,
+        theme: theme.trim() || "Inédit",
+        seal,
+        seal_color: sealColor,
+      })
+      .select()
+      .single();
+
+    if (colError || !col) {
+      setErrorMsg("Impossible de publier le recueil. Réessaie dans un instant.");
+      setSubmitting(false);
+      return;
+    }
+
+    const { error: poemError } = await supabase.from("poems").insert({
+      collection_id: col.id,
+      title: poemTitle.trim(),
+      content: text,
+      image_url: image.trim() || null,
+      position: 0,
+    });
+
+    setSubmitting(false);
+
+    if (poemError) {
+      setErrorMsg("Le recueil a été créé, mais le poème n'a pas pu être ajouté. Réessaie.");
+      return;
+    }
+
+    if (onPublished) await onPublished();
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-12">
@@ -433,6 +482,20 @@ function WriteView() {
       <div className="flex flex-col gap-6">
         <label className="flex flex-col gap-2">
           <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+            Votre nom
+          </span>
+          <input
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+            placeholder="Ex. Sasha M."
+            disabled={anonymous}
+            className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1 disabled:opacity-40"
+            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
             Titre du recueil
           </span>
           <input
@@ -440,6 +503,19 @@ function WriteView() {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Ex. Saisons obliques"
             className="font-display italic text-xl px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
+            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
+            Thème (optionnel)
+          </span>
+          <input
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
+            placeholder="Ex. Nature & solitude"
+            className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
             style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
           />
         </label>
@@ -506,16 +582,16 @@ function WriteView() {
 
         <div className="flex items-center gap-3 pt-2">
           <button
-            onClick={() => setPublished(true)}
-            disabled={!title || !poemTitle || !text}
+            onClick={handlePublish}
+            disabled={!title.trim() || !poemTitle.trim() || !text.trim() || submitting}
             className="font-ui text-sm px-6 py-3 rounded-full disabled:opacity-30 transition-opacity"
             style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
           >
-            Publier
+            {submitting ? "Publication..." : "Publier"}
           </button>
-          {published && (
-            <span className="font-ui text-sm" style={{ color: "var(--sage)" }}>
-              Publié {anonymous ? "anonymement " : ""}— visible dans « Découvrir »
+          {errorMsg && (
+            <span className="font-ui text-sm" style={{ color: "var(--wine)" }}>
+              {errorMsg}
             </span>
           )}
         </div>
@@ -576,29 +652,30 @@ export default function App() {
   const [collection, setCollection] = useState(null);
   const [poemIndex, setPoemIndex] = useState(0);
 
+  const loadCollections = async () => {
+    const { data: cols, error: colsError } = await supabase
+      .from("collections")
+      .select("*")
+      .order("id");
+    const { data: poems, error: poemsError } = await supabase
+      .from("poems")
+      .select("*")
+      .order("position");
+
+    if (colsError || poemsError || !cols || !poems) return;
+
+    const shaped = cols.map((c) => ({
+      ...c,
+      sealColor: c.seal_color,
+      poems: poems
+        .filter((p) => p.collection_id === c.id)
+        .map((p) => ({ ...p, lines: p.content.split("\n") })),
+    }));
+    setCollections(shaped);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const { data: cols, error: colsError } = await supabase
-        .from("collections")
-        .select("*")
-        .order("id");
-      const { data: poems, error: poemsError } = await supabase
-        .from("poems")
-        .select("*")
-        .order("position");
-
-      if (colsError || poemsError || !cols || !poems) return;
-
-      const shaped = cols.map((c) => ({
-        ...c,
-        sealColor: c.seal_color,
-        poems: poems
-          .filter((p) => p.collection_id === c.id)
-          .map((p) => ({ ...p, lines: p.content.split("\n") })),
-      }));
-      setCollections(shaped);
-    };
-    load();
+    loadCollections();
   }, []);
 
   const openCollection = (c, i) => {
@@ -641,7 +718,7 @@ export default function App() {
           back={() => setView("home")}
         />
       )}
-      {view === "write" && <WriteView />}
+      {view === "write" && <WriteView onPublished={async () => { await loadCollections(); setView("home"); }} />}
       {view === "profile" && <ProfileView collections={collections} openCollection={openCollection} />}
     </div>
   );
