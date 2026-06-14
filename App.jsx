@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit, Upload, Mail } from "lucide-react";
+import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit, Upload, Mail, Zap, Crown } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 // Stable identifier used for the like system, even for visitors without an account
@@ -131,6 +131,7 @@ function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWr
     items.push({ key: "following", label: "Abonnements", icon: Users });
     items.push({ key: "interactions", label: "Interactions", icon: MessageCircle });
     items.push({ key: "dm", label: "Messages", icon: Mail });
+    items.push({ key: "collab", label: "Collabs", icon: Crown });
   }
 
   return (
@@ -223,7 +224,7 @@ function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWr
   );
 }
 
-function HomeView({ collections, topLiked, freePoems, openCollection, openFreePoem, goToAuthor }) {
+function HomeView({ collections, topLiked, freePoems, openCollection, openFreePoem, goToAuthor, currentChallenge, onChallenge }) {
   const [query, setQuery] = useState("");
 
   if (collections.length === 0) {
@@ -251,6 +252,31 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
   const excerptLines = featuredPoem.lines.filter((l) => l).slice(0, 3);
   return (
     <div className="max-w-5xl mx-auto px-6 view-enter">
+
+      {/* Challenge banner */}
+      {currentChallenge && (
+        <button
+          onClick={onChallenge}
+          className="w-full flex items-center gap-4 mt-8 mb-2 px-5 py-4 rounded-xl text-left transition-all hover:shadow-sm"
+          style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+        >
+          <div className="flex items-center justify-center w-10 h-10 rounded-full shrink-0" style={{ background: "rgba(255,255,255,0.08)" }}>
+            <Zap size={18} style={{ color: "var(--sage)" }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "var(--sage)" }}>
+              Challenge · semaine {currentChallenge.week_number}
+            </p>
+            <p className="font-display italic text-base truncate" style={{ color: "var(--paper-warm)" }}>
+              {currentChallenge.title}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0 font-ui text-xs" style={{ color: "var(--sage)" }}>
+            Participer <ArrowRight size={13} />
+          </div>
+        </button>
+      )}
+
       {/* Hero */}
       <section className="pt-16 pb-14 grid md:grid-cols-[1fr_auto] gap-10 items-end border-b" style={{ borderColor: "var(--rule)" }}>
         <div>
@@ -394,12 +420,19 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
                       {c.theme}
                     </span>
                   </div>
-                  <h3
-                    className="font-display italic text-xl mb-1 transition-colors"
-                    style={{ color: "var(--ink)" }}
-                  >
-                    {c.title}
-                  </h3>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3
+                      className="font-display italic text-xl transition-colors"
+                      style={{ color: "var(--ink)" }}
+                    >
+                      {c.title}
+                    </h3>
+                    {c.is_collab && (
+                      <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
+                        <Crown size={10} /> Collab
+                      </span>
+                    )}
+                  </div>
                   <p className="font-ui text-sm mb-4" style={{ color: "var(--ink-light)" }}>
                     {c.author_id ? (
                       <span
@@ -461,6 +494,11 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
                         {isNew && (
                           <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: "var(--wine)", color: "var(--paper-warm)" }}>
                             Nouveau
+                          </span>
+                        )}
+                        {p.challenge_id && (
+                          <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
+                            <Zap size={9} /> Challenge
                           </span>
                         )}
                       </div>
@@ -1863,14 +1901,16 @@ function ProfileView({ collections, draftPoems, openCollection, session, profile
   );
 }
 
-function SideSnow() {
-  const flakes = Array.from({ length: 12 }, (_, i) => ({
-    side: i % 2 === 0 ? "left" : "right",
-    offset: 1 + ((i * 3) % 9),
-    size: 2 + (i % 3),
-    duration: 32 + (i % 6) * 6,
-    delay: -(i * 4.5),
-    opacity: 0.18 + (i % 3) * 0.08,
+function SideSnow({ darkMode }) {
+  const count = darkMode ? 28 : 12;
+  const flakes = Array.from({ length: count }, (_, i) => ({
+    left: darkMode
+      ? Math.random() * 100  // full width in dark mode
+      : i % 2 === 0 ? 1 + ((i * 3) % 9) : 91 + ((i * 3) % 9), // edges only in light
+    size: darkMode ? 1.5 + (i % 4) : 2 + (i % 3),
+    duration: darkMode ? 20 + (i % 8) * 5 : 32 + (i % 6) * 6,
+    delay: -(i * (darkMode ? 2.2 : 4.5)),
+    opacity: darkMode ? 0.35 + (i % 4) * 0.1 : 0.18 + (i % 3) * 0.08,
   }));
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
@@ -1879,7 +1919,7 @@ function SideSnow() {
           key={i}
           className="absolute rounded-full"
           style={{
-            [f.side]: `${f.offset}%`,
+            left: `${f.left}%`,
             top: "-4%",
             width: f.size,
             height: f.size,
@@ -2722,10 +2762,410 @@ function DMView({ session, profile, initialRecipient, onClearRecipient }) {
   );
 }
 
+function ChallengeView({ session, profile, challenge, freePoems, collections, openFreePoem, openCollection, goToAuthor, onBack }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [poemTitle, setPoemTitle] = useState("");
+  const [poemText, setPoemText] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+
+  const entries = freePoems.filter((p) => p.challenge_id === challenge.id);
+  const collectionEntries = collections.flatMap((c) =>
+    c.poems.filter((p) => p.challenge_id === challenge.id).map((p) => ({ ...p, collection: c }))
+  );
+  const allEntries = [...entries, ...collectionEntries].sort((a, b) => b.likes_count - a.likes_count);
+
+  const handleSubmit = async () => {
+    if (!session || !poemTitle.trim() || !poemText.trim()) return;
+    setSubmitting(true);
+    setError("");
+    const { error: err } = await supabase.from("poems").insert({
+      collection_id: null,
+      author_id: session.user.id,
+      author: profile?.username || "Anonyme",
+      title: poemTitle.trim(),
+      content: poemText,
+      position: 0,
+      status: "published",
+      challenge_id: challenge.id,
+    });
+    setSubmitting(false);
+    if (err) { setError("Erreur lors de l'envoi. Réessaie."); return; }
+    setPoemTitle("");
+    setPoemText("");
+    setSubmitted(true);
+  };
+
+  const endsIn = challenge.ends_at
+    ? Math.ceil((new Date(challenge.ends_at) - Date.now()) / 86400000)
+    : null;
+
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
+      <button onClick={onBack} className="flex items-center gap-2 font-ui text-sm mb-8 hover:opacity-70 transition-opacity" style={{ color: "var(--ink-light)" }}>
+        <ArrowLeft size={15} /> Retour
+      </button>
+
+      {/* Header */}
+      <div className="rounded-xl p-7 mb-10" style={{ background: "var(--ink)" }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Zap size={15} style={{ color: "var(--sage)" }} />
+          <span className="font-mono text-[10px] uppercase tracking-[0.2em]" style={{ color: "var(--sage)" }}>
+            Challenge · semaine {challenge.week_number}
+            {endsIn !== null && ` · encore ${endsIn} j`}
+          </span>
+        </div>
+        <h1 className="font-display italic text-3xl mb-3" style={{ color: "var(--paper-warm)" }}>
+          {challenge.title}
+        </h1>
+        {challenge.description && (
+          <p className="font-ui text-sm leading-relaxed" style={{ color: "rgba(240,235,225,0.6)" }}>
+            {challenge.description}
+          </p>
+        )}
+        <p className="font-mono text-xs mt-4" style={{ color: "var(--sage)" }}>
+          {allEntries.length} participation{allEntries.length === 1 ? "" : "s"}
+        </p>
+      </div>
+
+      {/* Soumettre un poème */}
+      {session ? (
+        <div className="mb-12">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>
+            Ta participation
+          </p>
+          {submitted ? (
+            <div className="p-5 rounded-lg border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+              <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
+                Poème soumis ! 🎉
+              </p>
+              <p className="font-ui text-sm mt-1" style={{ color: "var(--ink-light)" }}>
+                Il apparaît dans les participations ci-dessous.
+              </p>
+              <button onClick={() => setSubmitted(false)} className="font-ui text-xs mt-3 hover:opacity-70" style={{ color: "var(--sage)" }}>
+                Soumettre un autre
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <input
+                value={poemTitle}
+                onChange={(e) => setPoemTitle(e.target.value)}
+                placeholder="Titre du poème..."
+                className="font-display italic text-lg px-4 py-3 rounded-md border bg-transparent outline-none"
+                style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              />
+              <textarea
+                value={poemText}
+                onChange={(e) => setPoemText(e.target.value)}
+                placeholder={"Écris ton poème ici...\n\nChaque ligne = un vers."}
+                rows={7}
+                className="font-display italic px-4 py-3 rounded-md border bg-transparent outline-none resize-none text-base leading-relaxed"
+                style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              />
+              {error && <p className="font-ui text-xs" style={{ color: "var(--wine)" }}>{error}</p>}
+              <div className="flex items-center justify-between">
+                <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                  Le poème sera publié comme poème libre lié à ce challenge.
+                </p>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!poemTitle.trim() || !poemText.trim() || submitting}
+                  className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full disabled:opacity-30 transition-opacity"
+                  style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+                >
+                  <Zap size={14} />
+                  {submitting ? "Envoi..." : "Participer"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mb-12 p-5 rounded-lg border" style={{ borderColor: "var(--rule)" }}>
+          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+            Connecte-toi pour participer au challenge.
+          </p>
+        </div>
+      )}
+
+      {/* Participations */}
+      <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>
+        Participations
+      </p>
+      {allEntries.length === 0 ? (
+        <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>
+          Sois le premier à participer !
+        </p>
+      ) : (
+        <div className="flex flex-col gap-5">
+          {allEntries.map((p, idx) => (
+            <button
+              key={p.id}
+              onClick={() => p.collection ? openCollection(p.collection, p.collection.poems.findIndex(x => x.id === p.id)) : openFreePoem(p)}
+              className="flex items-start gap-4 p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
+              style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+            >
+              <span className="font-display italic text-2xl shrink-0" style={{ color: idx < 3 ? "var(--wine)" : "var(--rule)", width: 28 }}>
+                {idx + 1}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>{p.title}</p>
+                  {idx === 0 && <Trophy size={14} style={{ color: "var(--wine)" }} />}
+                </div>
+                <p className="font-ui text-xs mb-2" style={{ color: "var(--ink-light)" }}>
+                  {p.author || (p.collection?.author)} · {timeAgo(p.created_at)}
+                </p>
+                <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                  « {(p.lines || (p.content || "").split("\n")).find(l => l) || ""} »
+                </p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0" style={{ color: "var(--wine)" }}>
+                <Heart size={13} fill={p.likes_count > 0 ? "var(--wine)" : "none"} />
+                <span className="font-mono text-xs">{p.likes_count}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CollabView({ session, profile, collections, openCollection, goToAuthor }) {
+  const [invites, setInvites] = useState(null);
+  const [myCollabs, setMyCollabs] = useState([]);
+  const [inviteTarget, setInviteTarget] = useState(null);
+  const [inviteUsername, setInviteUsername] = useState("");
+  const [inviteSearch, setInviteSearch] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const myCollections = collections.filter((c) => c.author_id === session.user.id);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const { data } = await supabase
+        .from("collab_invites")
+        .select("*, collection:collections(*)")
+        .eq("invitee_id", session.user.id)
+        .order("created_at", { ascending: false });
+      if (active) setInvites(data || []);
+
+      const { data: accepted } = await supabase
+        .from("collab_invites")
+        .select("collection_id")
+        .eq("invitee_id", session.user.id)
+        .eq("status", "accepted");
+      if (active && accepted) {
+        const ids = accepted.map(r => r.collection_id);
+        setMyCollabs(collections.filter(c => ids.includes(c.id)));
+      }
+    };
+    load();
+    return () => { active = false; };
+  }, [session.user.id]);
+
+  const searchUser = async () => {
+    if (!inviteUsername.trim()) return;
+    setSearching(true);
+    const { data } = await supabase.from("profiles").select("id, username, avatar_url")
+      .ilike("username", inviteUsername.trim()).neq("id", session.user.id).limit(1).maybeSingle();
+    setInviteSearch(data || "none");
+    setSearching(false);
+  };
+
+  const sendInvite = async (userId) => {
+    if (!inviteTarget) return;
+    setSending(true);
+    setMsg("");
+    const { error } = await supabase.from("collab_invites").insert({
+      collection_id: inviteTarget,
+      invitee_id: userId,
+      invited_by: session.user.id,
+    });
+    setSending(false);
+    if (error) { setMsg("Déjà invité ou erreur."); return; }
+    setMsg("Invitation envoyée !");
+    setInviteUsername("");
+    setInviteSearch(null);
+  };
+
+  const respondInvite = async (inviteId, status) => {
+    await supabase.from("collab_invites").update({ status }).eq("id", inviteId);
+    setInvites(prev => prev.map(i => i.id === inviteId ? { ...i, status } : i));
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
+      <div className="flex items-center gap-2 mb-3">
+        <Crown size={16} style={{ color: "var(--sage)" }} />
+        <p className="font-mono text-xs uppercase tracking-[0.2em]" style={{ color: "var(--sage)" }}>Collections collaboratives</p>
+      </div>
+      <h1 className="font-display italic text-3xl mb-10" style={{ color: "var(--ink)" }}>Collaborations</h1>
+
+      {/* Mes recueils — inviter */}
+      <section className="mb-12">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>
+          Inviter quelqu'un dans un de tes recueils
+        </p>
+        {myCollections.length === 0 ? (
+          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Tu n'as pas encore de recueil publié.</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <select
+              value={inviteTarget || ""}
+              onChange={(e) => setInviteTarget(Number(e.target.value) || null)}
+              className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none"
+              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+            >
+              <option value="">Choisir un recueil...</option>
+              {myCollections.map(c => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </select>
+            {inviteTarget && (
+              <div className="flex gap-2">
+                <input
+                  value={inviteUsername}
+                  onChange={(e) => { setInviteUsername(e.target.value); setInviteSearch(null); setMsg(""); }}
+                  onKeyDown={(e) => e.key === "Enter" && searchUser()}
+                  placeholder="Nom d'utilisateur à inviter..."
+                  className="flex-1 font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none"
+                  style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+                />
+                <button
+                  onClick={searchUser}
+                  disabled={searching}
+                  className="font-ui text-sm px-5 py-3 rounded-md disabled:opacity-40 transition-opacity"
+                  style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+                >
+                  {searching ? "..." : "Chercher"}
+                </button>
+              </div>
+            )}
+            {inviteSearch && inviteSearch !== "none" && (
+              <div className="flex items-center gap-3 p-4 rounded-lg border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+                <AuthorBadge avatarUrl={inviteSearch.avatar_url} letter={inviteSearch.username.charAt(0).toUpperCase()} color="var(--sage)" size={32} />
+                <span className="font-display italic text-base flex-1" style={{ color: "var(--ink)" }}>{inviteSearch.username}</span>
+                <button
+                  onClick={() => sendInvite(inviteSearch.id)}
+                  disabled={sending}
+                  className="font-ui text-sm px-4 py-2 rounded-full disabled:opacity-40 transition-opacity"
+                  style={{ background: "var(--sage)", color: "var(--paper-warm)" }}
+                >
+                  {sending ? "..." : "Inviter"}
+                </button>
+              </div>
+            )}
+            {inviteSearch === "none" && <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>Aucun utilisateur trouvé.</p>}
+            {msg && <p className="font-ui text-xs" style={{ color: "var(--sage)" }}>{msg}</p>}
+          </div>
+        )}
+      </section>
+
+      {/* Invitations reçues */}
+      <section className="mb-12">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>
+          Invitations reçues
+        </p>
+        {invites === null ? (
+          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Chargement...</p>
+        ) : invites.length === 0 ? (
+          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Aucune invitation pour l'instant.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {invites.map(inv => (
+              <div key={inv.id} className="flex items-center gap-4 p-4 rounded-lg border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+                <div className="flex-1">
+                  <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>{inv.collection?.title || "Recueil"}</p>
+                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>{timeAgo(inv.created_at)}</p>
+                </div>
+                {inv.status === "pending" ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => respondInvite(inv.id, "accepted")}
+                      className="font-ui text-xs px-4 py-2 rounded-full"
+                      style={{ background: "var(--sage)", color: "var(--paper-warm)" }}
+                    >
+                      Accepter
+                    </button>
+                    <button
+                      onClick={() => respondInvite(inv.id, "declined")}
+                      className="font-ui text-xs px-4 py-2 rounded-full border"
+                      style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
+                    >
+                      Refuser
+                    </button>
+                  </div>
+                ) : (
+                  <span className="font-ui text-xs" style={{ color: inv.status === "accepted" ? "var(--sage)" : "var(--ink-light)" }}>
+                    {inv.status === "accepted" ? "Acceptée" : "Refusée"}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Recueils où je collabore */}
+      {myCollabs.length > 0 && (
+        <section>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>
+            Recueils où tu collabores
+          </p>
+          <div className="flex flex-col gap-3">
+            {myCollabs.map(c => (
+              <button
+                key={c.id}
+                onClick={() => openCollection(c, 0)}
+                className="flex items-center gap-4 p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
+                style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}
+              >
+                <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} size={36} />
+                <div className="flex-1">
+                  <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>{c.title}</p>
+                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>{c.author} · {(c.poems||[]).length} poèmes</p>
+                </div>
+                <Crown size={14} style={{ color: "var(--sage)" }} />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 function ModerationView({ collections, freePoems, refresh }) {
   const [reports, setReports] = useState([]);
   const [commentsMap, setCommentsMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [challengeTitle, setChallengeTitle] = useState("");
+  const [challengeDesc, setChallengeDesc] = useState("");
+  const [challengeWeek, setChallengeWeek] = useState(() => {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), 0, 1);
+    return Math.ceil(((d - start) / 86400000 + start.getDay() + 1) / 7);
+  });
+  const [challengeMsg, setChallengeMsg] = useState("");
+
+  const createChallenge = async () => {
+    if (!challengeTitle.trim()) return;
+    const { error } = await supabase.from("challenges").upsert(
+      { title: challengeTitle.trim(), description: challengeDesc.trim() || null, week_number: challengeWeek, year: new Date().getFullYear(), starts_at: new Date().toISOString() },
+      { onConflict: "week_number,year" }
+    );
+    if (error) { setChallengeMsg("Erreur : " + error.message); return; }
+    setChallengeMsg("Challenge créé !");
+    setChallengeTitle("");
+    setChallengeDesc("");
+    refresh();
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -2787,9 +3227,55 @@ function ModerationView({ collections, freePoems, refresh }) {
         Modération
       </p>
       <h1 className="font-display italic text-3xl mb-10" style={{ color: "var(--ink)" }}>
-        Signalements
+        Panneau modérateur
       </h1>
 
+      {/* Challenge creation */}
+      <section className="mb-12">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5 flex items-center gap-2" style={{ color: "var(--sage)" }}>
+          <Zap size={13} /> Créer un challenge
+        </p>
+        <div className="flex flex-col gap-3 p-5 rounded-lg border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+          <div className="flex gap-3">
+            <input
+              type="number"
+              value={challengeWeek}
+              onChange={(e) => setChallengeWeek(Number(e.target.value))}
+              className="font-ui text-sm px-3 py-2.5 rounded-md border bg-transparent outline-none w-20"
+              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              placeholder="Sem."
+            />
+            <input
+              value={challengeTitle}
+              onChange={(e) => setChallengeTitle(e.target.value)}
+              placeholder="Thème du challenge..."
+              className="flex-1 font-display italic text-base px-4 py-2.5 rounded-md border bg-transparent outline-none"
+              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+            />
+          </div>
+          <textarea
+            value={challengeDesc}
+            onChange={(e) => setChallengeDesc(e.target.value)}
+            placeholder="Description optionnelle..."
+            rows={2}
+            className="font-ui text-sm px-4 py-2.5 rounded-md border bg-transparent outline-none resize-none"
+            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+          />
+          <div className="flex items-center justify-between">
+            {challengeMsg && <span className="font-ui text-xs" style={{ color: "var(--sage)" }}>{challengeMsg}</span>}
+            <button
+              onClick={createChallenge}
+              disabled={!challengeTitle.trim()}
+              className="ml-auto font-ui text-sm px-5 py-2.5 rounded-full disabled:opacity-30 transition-opacity flex items-center gap-2"
+              style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+            >
+              <Zap size={14} /> Publier le challenge
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>Signalements</p>
       {reports.length === 0 ? (
         <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
           Aucun signalement en attente.
@@ -2877,6 +3363,8 @@ export default function App() {
   const [topLiked, setTopLiked] = useState([]);
   const [draftPoems, setDraftPoems] = useState([]);
   const [freePoems, setFreePoems] = useState([]);
+  const [currentChallenge, setCurrentChallenge] = useState(null);
+  const [activeChallenge, setActiveChallenge] = useState(null);
   const [editingDraft, setEditingDraft] = useState(null);
   const [authorId, setAuthorId] = useState(null);
   const [dmRecipient, setDmRecipient] = useState(null);
@@ -2989,6 +3477,17 @@ export default function App() {
       .sort((a, b) => b.likes_count - a.likes_count)
       .slice(0, 4);
     setTopLiked(top);
+
+    const now = new Date().toISOString();
+    const { data: ch } = await supabase
+      .from("challenges")
+      .select("*")
+      .lte("starts_at", now)
+      .or(`ends_at.is.null,ends_at.gte.${now}`)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setCurrentChallenge(ch || null);
   };
 
   useEffect(() => {
@@ -3119,14 +3618,36 @@ export default function App() {
         .view-enter { animation: fadeIn 0.35s ease-out; }
       `}</style>
 
-      {weather === "snow" && <SideSnow />}
+      {weather === "snow" && <SideSnow darkMode={darkMode} />}
       {weather === "rain" && <SideRain />}
       {weather === "sun" && <SideSun />}
 
       <div className="relative" style={{ zIndex: 1 }}>
         <TopNav view={view} setView={setView} session={session} profile={profile} darkMode={darkMode} setDarkMode={setDarkMode} goToWrite={() => { setEditingDraft(null); setView("write"); }} />
 
-        {view === "home" && <HomeView collections={collections} topLiked={topLiked} freePoems={freePoems} openCollection={openCollection} openFreePoem={openFreePoem} goToAuthor={goToAuthor} />}
+        {view === "home" && <HomeView collections={collections} topLiked={topLiked} freePoems={freePoems} openCollection={openCollection} openFreePoem={openFreePoem} goToAuthor={goToAuthor} currentChallenge={currentChallenge} onChallenge={() => { setActiveChallenge(currentChallenge); setView("challenge"); }} />}
+        {view === "challenge" && activeChallenge && (
+          <ChallengeView
+            session={session}
+            profile={profile}
+            challenge={activeChallenge}
+            freePoems={freePoems}
+            collections={collections}
+            openFreePoem={openFreePoem}
+            openCollection={openCollection}
+            goToAuthor={goToAuthor}
+            onBack={() => setView("home")}
+          />
+        )}
+        {view === "collab" && session && (
+          <CollabView
+            session={session}
+            profile={profile}
+            collections={collections}
+            openCollection={openCollection}
+            goToAuthor={goToAuthor}
+          />
+        )}
         {view === "reader" && collection && (
           <ReaderView
             collection={collection}
