@@ -301,7 +301,7 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
             <Heart size={14} style={{ color: "var(--wine)" }} fill="var(--wine)" />
           </div>
           <div className="grid sm:grid-cols-2 gap-5">
-            {topLiked.map((p) => {
+            {topLiked.filter((p) => p.collection && p.collection.poems).map((p) => {
               const idx = p.collection.poems.findIndex((x) => x.id === p.id);
               return (
                 <button
@@ -415,10 +415,10 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
                     ) : (
                       c.author
                     )}{" "}
-                    · {c.poems.length} poème{c.poems.length === 1 ? "" : "s"}
+                    · {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"}
                   </p>
                   <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
-                    « {c.poems[0].lines.find((l) => l)} »
+                    « {c.poems?.[0]?.lines?.find((l) => l) || ""} »
                   </p>
                 </div>
               </button>
@@ -784,7 +784,7 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                 Sommaire
               </p>
               <ul className="flex flex-col gap-1 border-l" style={{ borderColor: "var(--rule)" }}>
-                {collection.poems.map((p, i) => (
+                {(collection.poems||[]).map((p, i) => (
                   <li key={p.id}>
                     <button
                       onClick={() => setPoemIndex(i)}
@@ -1510,7 +1510,7 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
             >
               {myCollections.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.title} ({c.poems.length} poème{c.poems.length === 1 ? "" : "s"})
+                  {c.title} ({(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"})
                 </option>
               ))}
             </select>
@@ -1819,7 +1819,7 @@ function ProfileView({ collections, draftPoems, openCollection, session, profile
                     {c.title}
                   </p>
                   <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                    {c.poems.length} poème{c.poems.length === 1 ? "" : "s"} · {c.theme}
+                    {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"} · {c.theme}
                   </p>
                 </div>
               </div>
@@ -1990,7 +1990,7 @@ function AuthorView({ authorId, session, collections, openCollection, back, goTo
   };
 
   const authorCollections = collections.filter((c) => c.author_id === authorId);
-  const totalLikes = authorCollections.reduce((sum, c) => sum + c.poems.reduce((s, p) => s + p.likes_count, 0), 0);
+  const totalLikes = authorCollections.reduce((sum, c) => sum + (c.poems || []).reduce((s, p) => s + (p.likes_count || 0), 0), 0);
   const isSelf = session?.user?.id === authorId;
 
   if (loading || !authorProfile) {
@@ -2084,7 +2084,7 @@ function AuthorView({ authorId, session, collections, openCollection, back, goTo
                     {c.title}
                   </p>
                   <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                    {c.poems.length} poème{c.poems.length === 1 ? "" : "s"} · {c.theme}
+                    {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"} · {c.theme}
                   </p>
                 </div>
               </div>
@@ -2118,7 +2118,7 @@ function FollowingView({ session, collections, openCollection, goToAuthor }) {
   const authorStats = {};
   collections.forEach((c) => {
     if (!c.author_id) return;
-    const likes = c.poems.reduce((s, p) => s + p.likes_count, 0);
+    const likes = (c.poems || []).reduce((s, p) => s + (p.likes_count || 0), 0);
     if (!authorStats[c.author_id]) authorStats[c.author_id] = { author: c.author, author_id: c.author_id, likes: 0, collections: 0 };
     authorStats[c.author_id].likes += likes;
     authorStats[c.author_id].collections += 1;
@@ -2214,7 +2214,7 @@ function FollowingView({ session, collections, openCollection, goToAuthor }) {
                   {c.title}
                 </h3>
                 <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-                  {c.author} · {c.poems.length} poème{c.poems.length === 1 ? "" : "s"}
+                  {c.author} · {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"}
                 </p>
               </button>
             ))}
@@ -2238,7 +2238,7 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
 
   const findPoemTitle = (poemId) => {
     for (const c of collections) {
-      const p = c.poems.find((x) => x.id === poemId);
+      const p = (c.poems||[]).find((x) => x.id === poemId);
       if (p) return p.title;
     }
     const fp = (freePoems || []).find((p) => p.id === poemId);
@@ -2748,7 +2748,7 @@ function ModerationView({ collections, freePoems, refresh }) {
   }, []);
 
   const allPoems = [
-    ...collections.flatMap((c) => c.poems.map((p) => ({ ...p, collection: c }))),
+    ...collections.flatMap((c) => (c.poems || []).map((p) => ({ ...p, collection: c }))),
     ...(freePoems || []).map((p) => ({ ...p, collection: null })),
   ];
 
@@ -3005,7 +3005,7 @@ export default function App() {
     if (!poemId) return;
     deepLinkHandled.current = true;
     for (const c of collections) {
-      const idx = c.poems.findIndex((p) => String(p.id) === poemId);
+      const idx = (c.poems||[]).findIndex((p) => String(p.id) === poemId);
       if (idx !== -1) {
         setCollection(c);
         setPoemIndex(idx);
@@ -3053,7 +3053,7 @@ export default function App() {
 
   const goToPoem = (poemId) => {
     for (const c of collections) {
-      const idx = c.poems.findIndex((p) => p.id === poemId);
+      const idx = (c.poems||[]).findIndex((p) => p.id === poemId);
       if (idx !== -1) {
         openCollection(c, idx);
         return;
