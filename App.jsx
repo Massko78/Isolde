@@ -637,12 +637,27 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
   const toggleLike = async () => {
     const voterId = getVoterId(session);
     const next = !liked;
+    const newCount = Math.max(0, likesCount + (next ? 1 : -1));
     setLiked(next);
-    setLikesCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    setLikesCount(newCount);
+
     if (next) {
-      await supabase.from("likes").insert({ poem_id: poem.id, voter_id: voterId });
+      // Try the likes table first (exists after supabase-likes-fix.sql)
+      const { error } = await supabase.from("likes").insert({ poem_id: poem.id, voter_id: voterId });
+      if (error && error.code === "42P01") {
+        // Table doesn't exist yet — fall back to direct count update
+        await supabase.from("poems").update({ likes_count: newCount }).eq("id", poem.id);
+      } else if (!error) {
+        // Table exists but trigger may not — always sync the count too
+        await supabase.from("poems").update({ likes_count: newCount }).eq("id", poem.id);
+      }
     } else {
-      await supabase.from("likes").delete().eq("poem_id", poem.id).eq("voter_id", voterId);
+      const { error } = await supabase.from("likes").delete().eq("poem_id", poem.id).eq("voter_id", voterId);
+      if (error && error.code === "42P01") {
+        await supabase.from("poems").update({ likes_count: newCount }).eq("id", poem.id);
+      } else if (!error) {
+        await supabase.from("poems").update({ likes_count: newCount }).eq("id", poem.id);
+      }
     }
   };
 
