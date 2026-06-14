@@ -2917,16 +2917,30 @@ export default function App() {
   }, []);
 
   const loadCollections = async () => {
-    const { data: cols, error: colsError } = await supabase
+    // Try ordering by updated_at (exists after running supabase-dm-order.sql),
+    // fall back to created_at if the column doesn't exist yet
+    let cols, poems;
+    const { data: colsA, error: colsErrA } = await supabase
       .from("collections")
       .select("*")
       .order("updated_at", { ascending: false });
-    const { data: poems, error: poemsError } = await supabase
+    if (colsErrA) {
+      const { data: colsB } = await supabase
+        .from("collections")
+        .select("*")
+        .order("created_at", { ascending: false });
+      cols = colsB;
+    } else {
+      cols = colsA;
+    }
+
+    const { data: poemsData } = await supabase
       .from("poems")
       .select("*")
       .order("position");
+    poems = poemsData;
 
-    if (colsError || poemsError || !cols || !poems) return;
+    if (!cols || !poems) return;
 
     const authorIds = [
       ...new Set([...cols.map((c) => c.author_id), ...poems.map((p) => p.author_id)].filter(Boolean)),
@@ -2940,28 +2954,29 @@ export default function App() {
     }
 
     const shaped = cols
+      .filter((c) => c && c.id)
       .map((c) => ({
         ...c,
         sealColor: c.seal_color,
         authorAvatar: c.author_id ? avatarMap[c.author_id] : null,
         poems: poems
-          .filter((p) => p.collection_id === c.id && p.status === "published")
-          .map((p) => ({ ...p, lines: p.content.split("\n") })),
+          .filter((p) => p && p.collection_id === c.id && (p.status === "published" || !p.status))
+          .map((p) => ({ ...p, lines: (p.content || "").split("\n") })),
       }))
       .filter((c) => c.poems.length > 0);
     setCollections(shaped);
 
     const free = poems
-      .filter((p) => !p.collection_id && p.status === "published")
+      .filter((p) => p && !p.collection_id && (p.status === "published" || !p.status))
       .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
-      .map((p) => ({ ...p, lines: p.content.split("\n"), authorAvatar: p.author_id ? avatarMap[p.author_id] : null }));
+      .map((p) => ({ ...p, lines: (p.content || "").split("\n"), authorAvatar: p.author_id ? avatarMap[p.author_id] : null }));
     setFreePoems(free);
 
     const drafts = poems
-      .filter((p) => p.status === "draft")
+      .filter((p) => p && p.status === "draft")
       .map((p) => {
         const col = cols.find((c) => c.id === p.collection_id);
-        return { ...p, lines: p.content.split("\n"), collection: col || null };
+        return { ...p, lines: (p.content || "").split("\n"), collection: col || null };
       });
     setDraftPoems(drafts);
 
