@@ -257,22 +257,32 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
       {currentChallenge && (
         <button
           onClick={onChallenge}
-          className="w-full flex items-center gap-4 mt-8 mb-2 px-5 py-4 rounded-xl text-left transition-all hover:shadow-sm"
-          style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+          className="w-full text-left mt-8 mb-2 rounded-2xl overflow-hidden transition-all hover:opacity-95 hover:shadow-lg"
+          style={{ background: "var(--ink)" }}
         >
-          <div className="flex items-center justify-center w-10 h-10 rounded-full shrink-0" style={{ background: "rgba(255,255,255,0.08)" }}>
-            <Zap size={18} style={{ color: "var(--sage)" }} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "var(--sage)" }}>
-              Challenge · semaine {currentChallenge.week_number}
-            </p>
-            <p className="font-display italic text-base truncate" style={{ color: "var(--paper-warm)" }}>
+          <div className="px-7 pt-7 pb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Zap size={14} style={{ color: "var(--sage)" }} />
+              <span className="font-mono text-[10px] uppercase tracking-[0.25em]" style={{ color: "var(--sage)" }}>
+                Challenge · semaine {currentChallenge.week_number}
+              </span>
+            </div>
+            <p className="font-display italic leading-tight mb-3" style={{ fontSize: "clamp(1.6rem, 3.5vw, 2.4rem)", color: "var(--paper-warm)" }}>
               {currentChallenge.title}
             </p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0 font-ui text-xs" style={{ color: "var(--sage)" }}>
-            Participer <ArrowRight size={13} />
+            {currentChallenge.description && (
+              <p className="font-ui text-sm leading-relaxed mb-5" style={{ color: "rgba(240,235,225,0.55)" }}>
+                {currentChallenge.description}
+              </p>
+            )}
+            <div className="flex items-center justify-between pt-4 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+              <span className="font-mono text-xs" style={{ color: "rgba(240,235,225,0.4)" }}>
+                Écris et soumets ton poème
+              </span>
+              <span className="flex items-center gap-1.5 font-ui text-sm px-4 py-2 rounded-full" style={{ background: "rgba(255,255,255,0.1)", color: "var(--paper-warm)" }}>
+                Participer <ArrowRight size={14} />
+              </span>
+            </div>
           </div>
         </button>
       )}
@@ -2933,71 +2943,110 @@ function ChallengeView({ session, profile, challenge, freePoems, collections, op
   );
 }
 
-function CollabView({ session, profile, collections, openCollection, goToAuthor }) {
+function CollabView({ session, profile, collections, openCollection, refresh }) {
   const [invites, setInvites] = useState(null);
   const [myCollabs, setMyCollabs] = useState([]);
-  const [inviteTarget, setInviteTarget] = useState(null);
-  const [inviteUsername, setInviteUsername] = useState("");
-  const [inviteSearch, setInviteSearch] = useState(null);
+  const [sentInvites, setSentInvites] = useState([]);
+
+  // New collab form
+  const [step, setStep] = useState("form"); // "form" | "sent"
+  const [collabTitle, setCollabTitle] = useState("");
+  const [collabTheme, setCollabTheme] = useState("");
+  const [partnerUsername, setPartnerUsername] = useState("");
+  const [partnerResult, setPartnerResult] = useState(null);
   const [searching, setSearching] = useState(false);
   const [sending, setSending] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [formMsg, setFormMsg] = useState("");
 
-  const myCollections = collections.filter((c) => c.author_id === session.user.id);
+  const loadData = async () => {
+    // Invitations received
+    const { data: recv } = await supabase
+      .from("collab_invites")
+      .select("*, collection:collections(*)")
+      .eq("invitee_id", session.user.id)
+      .order("created_at", { ascending: false });
+    setInvites(recv || []);
+
+    // Collections where I'm accepted collab
+    const { data: accepted } = await supabase
+      .from("collab_invites")
+      .select("collection_id")
+      .eq("invitee_id", session.user.id)
+      .eq("status", "accepted");
+    if (accepted) {
+      const ids = accepted.map(r => r.collection_id);
+      setMyCollabs(collections.filter(c => ids.includes(c.id)));
+    }
+
+    // Invites I sent (pending)
+    const { data: sent } = await supabase
+      .from("collab_invites")
+      .select("*, collection:collections(*), invitee:profiles!collab_invites_invitee_id_fkey(username, avatar_url)")
+      .eq("invited_by", session.user.id)
+      .order("created_at", { ascending: false });
+    setSentInvites(sent || []);
+  };
 
   useEffect(() => {
-    let active = true;
-    const load = async () => {
-      const { data } = await supabase
-        .from("collab_invites")
-        .select("*, collection:collections(*)")
-        .eq("invitee_id", session.user.id)
-        .order("created_at", { ascending: false });
-      if (active) setInvites(data || []);
-
-      const { data: accepted } = await supabase
-        .from("collab_invites")
-        .select("collection_id")
-        .eq("invitee_id", session.user.id)
-        .eq("status", "accepted");
-      if (active && accepted) {
-        const ids = accepted.map(r => r.collection_id);
-        setMyCollabs(collections.filter(c => ids.includes(c.id)));
-      }
-    };
-    load();
-    return () => { active = false; };
+    loadData();
   }, [session.user.id]);
 
-  const searchUser = async () => {
-    if (!inviteUsername.trim()) return;
+  const searchPartner = async () => {
+    if (!partnerUsername.trim()) return;
     setSearching(true);
     const { data } = await supabase.from("profiles").select("id, username, avatar_url")
-      .ilike("username", inviteUsername.trim()).neq("id", session.user.id).limit(1).maybeSingle();
-    setInviteSearch(data || "none");
+      .ilike("username", partnerUsername.trim()).neq("id", session.user.id).limit(1).maybeSingle();
+    setPartnerResult(data || "none");
     setSearching(false);
   };
 
-  const sendInvite = async (userId) => {
-    if (!inviteTarget) return;
+  const sendCollab = async () => {
+    if (!collabTitle.trim() || !partnerResult || partnerResult === "none") return;
     setSending(true);
-    setMsg("");
-    const { error } = await supabase.from("collab_invites").insert({
-      collection_id: inviteTarget,
-      invitee_id: userId,
+    setFormMsg("");
+
+    // 1. Create the collection marked as collab
+    const SEAL_COLORS = ["#8B3A4A","#6E7F5C","#3A4A6E","#7A5C3A","#5C3A7A"];
+    const seal = profile?.username?.charAt(0).toUpperCase() || "?";
+    const sealColor = SEAL_COLORS[Math.floor(Math.random() * SEAL_COLORS.length)];
+    const { data: col, error: colErr } = await supabase.from("collections").insert({
+      title: collabTitle.trim(),
+      author: profile?.username || "Anonyme",
+      author_id: session.user.id,
+      theme: collabTheme.trim() || "Collaboration",
+      seal,
+      seal_color: sealColor,
+      is_collab: true,
+    }).select().single();
+
+    if (colErr || !col) { setFormMsg("Erreur lors de la création."); setSending(false); return; }
+
+    // 2. Send invite
+    const { error: invErr } = await supabase.from("collab_invites").insert({
+      collection_id: col.id,
+      invitee_id: partnerResult.id,
       invited_by: session.user.id,
     });
+
     setSending(false);
-    if (error) { setMsg("Déjà invité ou erreur."); return; }
-    setMsg("Invitation envoyée !");
-    setInviteUsername("");
-    setInviteSearch(null);
+    if (invErr) { setFormMsg("Recueil créé mais invitation échouée."); return; }
+
+    setCollabTitle("");
+    setCollabTheme("");
+    setPartnerUsername("");
+    setPartnerResult(null);
+    setStep("sent");
+    await loadData();
+    if (refresh) refresh();
   };
 
-  const respondInvite = async (inviteId, status) => {
+  const respondInvite = async (inviteId, status, collectionId) => {
     await supabase.from("collab_invites").update({ status }).eq("id", inviteId);
     setInvites(prev => prev.map(i => i.id === inviteId ? { ...i, status } : i));
+    if (status === "accepted") await loadData();
   };
+
+  const myOwnCollabs = collections.filter(c => c.author_id === session.user.id && c.is_collab);
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
@@ -3007,68 +3056,97 @@ function CollabView({ session, profile, collections, openCollection, goToAuthor 
       </div>
       <h1 className="font-display italic text-3xl mb-10" style={{ color: "var(--ink)" }}>Collaborations</h1>
 
-      {/* Mes recueils — inviter */}
-      <section className="mb-12">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>
-          Inviter quelqu'un dans un de tes recueils
+      {/* ── Proposer une nouvelle collab ── */}
+      <section className="mb-14">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] mb-6" style={{ color: "var(--sage)" }}>
+          Proposer une collaboration
         </p>
-        {myCollections.length === 0 ? (
-          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Tu n'as pas encore de recueil publié.</p>
+
+        {step === "sent" ? (
+          <div className="p-6 rounded-xl border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+            <p className="font-display italic text-xl mb-2" style={{ color: "var(--ink)" }}>Invitation envoyée !</p>
+            <p className="font-ui text-sm mb-4" style={{ color: "var(--ink-light)" }}>
+              Le recueil a été créé. Dès que ton partenaire accepte, vous pourrez tous les deux y ajouter des poèmes.
+            </p>
+            <button onClick={() => setStep("form")} className="font-ui text-sm hover:opacity-70 transition-opacity" style={{ color: "var(--sage)" }}>
+              Proposer une autre collab
+            </button>
+          </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            <select
-              value={inviteTarget || ""}
-              onChange={(e) => setInviteTarget(Number(e.target.value) || null)}
-              className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none"
-              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-            >
-              <option value="">Choisir un recueil...</option>
-              {myCollections.map(c => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
-            </select>
-            {inviteTarget && (
+          <div className="flex flex-col gap-4 p-6 rounded-xl border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>Titre du recueil</span>
+                <input
+                  value={collabTitle}
+                  onChange={(e) => setCollabTitle(e.target.value)}
+                  placeholder="Ex. Fragments à deux voix"
+                  className="font-display italic text-base px-4 py-3 rounded-md border bg-transparent outline-none"
+                  style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>Thème (optionnel)</span>
+                <input
+                  value={collabTheme}
+                  onChange={(e) => setCollabTheme(e.target.value)}
+                  placeholder="Ex. Dualité, Lumière…"
+                  className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none"
+                  style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+                />
+              </label>
+            </div>
+
+            <div className="border-t pt-4" style={{ borderColor: "var(--rule)" }}>
+              <span className="font-mono text-[11px] uppercase tracking-wider mb-3 block" style={{ color: "var(--ink-light)" }}>Inviter un partenaire</span>
               <div className="flex gap-2">
                 <input
-                  value={inviteUsername}
-                  onChange={(e) => { setInviteUsername(e.target.value); setInviteSearch(null); setMsg(""); }}
-                  onKeyDown={(e) => e.key === "Enter" && searchUser()}
-                  placeholder="Nom d'utilisateur à inviter..."
+                  value={partnerUsername}
+                  onChange={(e) => { setPartnerUsername(e.target.value); setPartnerResult(null); }}
+                  onKeyDown={(e) => e.key === "Enter" && searchPartner()}
+                  placeholder="Nom d'utilisateur..."
                   className="flex-1 font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none"
                   style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
                 />
                 <button
-                  onClick={searchUser}
-                  disabled={searching}
+                  onClick={searchPartner}
+                  disabled={searching || !partnerUsername.trim()}
                   className="font-ui text-sm px-5 py-3 rounded-md disabled:opacity-40 transition-opacity"
                   style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
                 >
                   {searching ? "..." : "Chercher"}
                 </button>
               </div>
-            )}
-            {inviteSearch && inviteSearch !== "none" && (
-              <div className="flex items-center gap-3 p-4 rounded-lg border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
-                <AuthorBadge avatarUrl={inviteSearch.avatar_url} letter={inviteSearch.username.charAt(0).toUpperCase()} color="var(--sage)" size={32} />
-                <span className="font-display italic text-base flex-1" style={{ color: "var(--ink)" }}>{inviteSearch.username}</span>
-                <button
-                  onClick={() => sendInvite(inviteSearch.id)}
-                  disabled={sending}
-                  className="font-ui text-sm px-4 py-2 rounded-full disabled:opacity-40 transition-opacity"
-                  style={{ background: "var(--sage)", color: "var(--paper-warm)" }}
-                >
-                  {sending ? "..." : "Inviter"}
-                </button>
-              </div>
-            )}
-            {inviteSearch === "none" && <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>Aucun utilisateur trouvé.</p>}
-            {msg && <p className="font-ui text-xs" style={{ color: "var(--sage)" }}>{msg}</p>}
+
+              {partnerResult && partnerResult !== "none" && (
+                <div className="flex items-center gap-3 mt-3 p-3 rounded-lg" style={{ background: "var(--paper)" }}>
+                  <AuthorBadge avatarUrl={partnerResult.avatar_url} letter={partnerResult.username.charAt(0).toUpperCase()} color="var(--sage)" size={34} />
+                  <span className="font-display italic text-base flex-1" style={{ color: "var(--ink)" }}>{partnerResult.username}</span>
+                  <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-full" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>Trouvé</span>
+                </div>
+              )}
+              {partnerResult === "none" && (
+                <p className="font-ui text-xs mt-2" style={{ color: "var(--ink-light)" }}>Aucun utilisateur trouvé.</p>
+              )}
+            </div>
+
+            {formMsg && <p className="font-ui text-xs" style={{ color: "var(--wine)" }}>{formMsg}</p>}
+
+            <button
+              onClick={sendCollab}
+              disabled={!collabTitle.trim() || !partnerResult || partnerResult === "none" || sending}
+              className="self-end flex items-center gap-2 font-ui text-sm px-6 py-3 rounded-full disabled:opacity-30 transition-opacity"
+              style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+            >
+              <Crown size={14} />
+              {sending ? "Création..." : "Créer la collab"}
+            </button>
           </div>
         )}
       </section>
 
-      {/* Invitations reçues */}
-      <section className="mb-12">
+      {/* ── Invitations reçues ── */}
+      <section className="mb-14">
         <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>
           Invitations reçues
         </p>
@@ -3080,30 +3158,31 @@ function CollabView({ session, profile, collections, openCollection, goToAuthor 
           <div className="flex flex-col gap-3">
             {invites.map(inv => (
               <div key={inv.id} className="flex items-center gap-4 p-4 rounded-lg border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
-                <div className="flex-1">
-                  <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>{inv.collection?.title || "Recueil"}</p>
-                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>{timeAgo(inv.created_at)}</p>
+                <Crown size={15} style={{ color: "var(--sage)" }} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-display italic text-base truncate" style={{ color: "var(--ink)" }}>
+                    {inv.collection?.title || "Recueil"}
+                  </p>
+                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                    Invitation reçue {timeAgo(inv.created_at)}
+                  </p>
                 </div>
                 {inv.status === "pending" ? (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => respondInvite(inv.id, "accepted")}
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => respondInvite(inv.id, "accepted", inv.collection_id)}
                       className="font-ui text-xs px-4 py-2 rounded-full"
-                      style={{ background: "var(--sage)", color: "var(--paper-warm)" }}
-                    >
+                      style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
                       Accepter
                     </button>
-                    <button
-                      onClick={() => respondInvite(inv.id, "declined")}
+                    <button onClick={() => respondInvite(inv.id, "declined")}
                       className="font-ui text-xs px-4 py-2 rounded-full border"
-                      style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
-                    >
+                      style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}>
                       Refuser
                     </button>
                   </div>
                 ) : (
-                  <span className="font-ui text-xs" style={{ color: inv.status === "accepted" ? "var(--sage)" : "var(--ink-light)" }}>
-                    {inv.status === "accepted" ? "Acceptée" : "Refusée"}
+                  <span className="font-ui text-xs shrink-0" style={{ color: inv.status === "accepted" ? "var(--sage)" : "var(--ink-light)" }}>
+                    {inv.status === "accepted" ? "Acceptée ✓" : "Refusée"}
                   </span>
                 )}
               </div>
@@ -3112,24 +3191,24 @@ function CollabView({ session, profile, collections, openCollection, goToAuthor 
         )}
       </section>
 
-      {/* Recueils où je collabore */}
-      {myCollabs.length > 0 && (
+      {/* ── Mes collabs (créées + rejointes) ── */}
+      {(myOwnCollabs.length > 0 || myCollabs.length > 0) && (
         <section>
           <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5" style={{ color: "var(--sage)" }}>
-            Recueils où tu collabores
+            Recueils collaboratifs
           </p>
           <div className="flex flex-col gap-3">
-            {myCollabs.map(c => (
-              <button
-                key={c.id}
-                onClick={() => openCollection(c, 0)}
+            {[...myOwnCollabs, ...myCollabs.filter(c => !myOwnCollabs.find(x => x.id === c.id))].map(c => (
+              <button key={c.id} onClick={() => openCollection(c, 0)}
                 className="flex items-center gap-4 p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
-                style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}
-              >
+                style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
                 <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} size={36} />
-                <div className="flex-1">
-                  <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>{c.title}</p>
-                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>{c.author} · {(c.poems||[]).length} poèmes</p>
+                <div className="flex-1 min-w-0">
+                  <p className="font-display italic text-base truncate" style={{ color: "var(--ink)" }}>{c.title}</p>
+                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+                    {c.author} · {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"}
+                    {c.author_id === session.user.id ? " · Créé par toi" : " · Tu collabores"}
+                  </p>
                 </div>
                 <Crown size={14} style={{ color: "var(--sage)" }} />
               </button>
@@ -3645,7 +3724,7 @@ export default function App() {
             profile={profile}
             collections={collections}
             openCollection={openCollection}
-            goToAuthor={goToAuthor}
+            refresh={loadCollections}
           />
         )}
         {view === "reader" && collection && (
