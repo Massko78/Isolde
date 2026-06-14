@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit, Upload } from "lucide-react";
+import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit, Upload, Mail } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 // Stable identifier used for the like system, even for visitors without an account
@@ -130,6 +130,7 @@ function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWr
   if (session) {
     items.push({ key: "following", label: "Abonnements", icon: Users });
     items.push({ key: "interactions", label: "Interactions", icon: MessageCircle });
+    items.push({ key: "dm", label: "Messages", icon: Mail });
   }
 
   return (
@@ -429,51 +430,68 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
       {/* Free-standing poems */}
       {freePoems.length > 0 && (
         <section className="pb-14">
-          <div className="flex items-baseline justify-between mb-6">
-            <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
-              Poèmes libres
-            </h2>
-            <p className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
-              {freePoems.length} poème{freePoems.length === 1 ? "" : "s"}
-            </p>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+                Poèmes libres
+              </h2>
+              <span className="font-mono text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
+                {freePoems.length}
+              </span>
+            </div>
           </div>
-          <div className="grid sm:grid-cols-2 gap-5">
-            {freePoems.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => openFreePoem(p)}
-                className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm"
-                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-              >
-                <div className="flex items-center gap-4 mb-3">
-                  <AuthorBadge avatarUrl={p.authorAvatar} letter={(p.author || "?").charAt(0).toUpperCase()} color="var(--wine)" size={32} />
-                  <div>
-                    <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
-                      {p.title}
-                    </p>
-                    <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                      {p.author_id ? (
-                        <span
-                          role="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            goToAuthor(p.author_id);
-                          }}
-                          className="hover:underline"
-                        >
-                          {p.author}
-                        </span>
-                      ) : (
-                        p.author
-                      )}
-                    </p>
+          <div className="flex flex-col gap-4">
+            {freePoems.map((p) => {
+              const isNew = Date.now() - new Date(p.updated_at || p.created_at).getTime() < 48 * 3600 * 1000;
+              const preview = p.lines.filter((l) => l.trim()).slice(0, 3);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => openFreePoem(p)}
+                  className="text-left rounded-lg border transition-colors hover:shadow-md group"
+                  style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+                >
+                  <div className="flex items-start gap-4 p-5">
+                    <AuthorBadge avatarUrl={p.authorAvatar} letter={(p.author || "?").charAt(0).toUpperCase()} color="var(--wine)" size={36} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <p className="font-display italic text-xl" style={{ color: "var(--ink)" }}>
+                          {p.title}
+                        </p>
+                        {isNew && (
+                          <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: "var(--wine)", color: "var(--paper-warm)" }}>
+                            Nouveau
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-ui text-xs mb-3" style={{ color: "var(--ink-light)" }}>
+                        {p.author_id ? (
+                          <span role="button" onClick={(e) => { e.stopPropagation(); goToAuthor(p.author_id); }} className="hover:underline">
+                            {p.author}
+                          </span>
+                        ) : p.author}
+                        {" · "}
+                        {timeAgo(p.updated_at || p.created_at)}
+                      </p>
+                      <div className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                        {preview.map((line, i) => (
+                          <p key={i}>{line}</p>
+                        ))}
+                        {p.lines.filter((l) => l.trim()).length > 3 && (
+                          <p className="font-ui not-italic text-xs mt-1" style={{ color: "var(--ink-light)", opacity: 0.6 }}>
+                            Lire la suite →
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 mt-1">
+                      <Heart size={12} fill={p.likes_count > 0 ? "var(--wine)" : "none"} stroke="var(--wine)" />
+                      <span className="font-mono text-xs" style={{ color: "var(--wine)" }}>{p.likes_count}</span>
+                    </div>
                   </div>
-                </div>
-                <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
-                  « {p.lines.find((l) => l)} »
-                </p>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </section>
       )}
@@ -1927,7 +1945,7 @@ function SideSun() {
   );
 }
 
-function AuthorView({ authorId, session, collections, openCollection, back }) {
+function AuthorView({ authorId, session, collections, openCollection, back, goToDM }) {
   const [authorProfile, setAuthorProfile] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -2012,18 +2030,28 @@ function AuthorView({ authorId, session, collections, openCollection, back }) {
           </div>
         </div>
         {session && !isSelf && (
-          <button
-            onClick={toggleFollow}
-            className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors"
-            style={
-              isFollowing
-                ? { border: "1px solid var(--rule)", color: "var(--ink-light)" }
-                : { background: "var(--ink)", color: "var(--paper-warm)" }
-            }
-          >
-            {isFollowing ? <UserMinus size={15} /> : <UserPlus size={15} />}
-            {isFollowing ? "Ne plus suivre" : "Suivre"}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={toggleFollow}
+              className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors"
+              style={
+                isFollowing
+                  ? { border: "1px solid var(--rule)", color: "var(--ink-light)" }
+                  : { background: "var(--ink)", color: "var(--paper-warm)" }
+              }
+            >
+              {isFollowing ? <UserMinus size={15} /> : <UserPlus size={15} />}
+              {isFollowing ? "Ne plus suivre" : "Suivre"}
+            </button>
+            <button
+              onClick={() => goToDM({ id: authorId, username: authorProfile.username, avatar_url: authorProfile.avatar_url })}
+              className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors border"
+              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+            >
+              <Mail size={15} />
+              Message
+            </button>
+          </div>
         )}
       </div>
 
@@ -2448,6 +2476,252 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
   );
 }
 
+function DMView({ session, profile, initialRecipient, onClearRecipient }) {
+  const [conversations, setConversations] = useState([]);
+  const [activeConv, setActiveConv] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [newRecipientUsername, setNewRecipientUsername] = useState("");
+  const [searchResult, setSearchResult] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const loadConversations = async () => {
+    const { data } = await supabase
+      .from("conversations")
+      .select("*")
+      .or(`participant_a.eq.${session.user.id},participant_b.eq.${session.user.id}`)
+      .order("last_message_at", { ascending: false });
+    if (!data) { setLoading(false); return; }
+    const otherIds = data.map((c) => (c.participant_a === session.user.id ? c.participant_b : c.participant_a));
+    let profMap = {};
+    if (otherIds.length > 0) {
+      const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", otherIds);
+      (profs || []).forEach((p) => { profMap[p.id] = p; });
+    }
+    const shaped = data.map((c) => {
+      const otherId = c.participant_a === session.user.id ? c.participant_b : c.participant_a;
+      return { ...c, other: profMap[otherId] || { id: otherId, username: "Utilisateur", avatar_url: null } };
+    });
+    setConversations(shaped);
+    setLoading(false);
+    return shaped;
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      const shaped = await loadConversations();
+      if (initialRecipient && shaped) {
+        const existing = shaped.find((c) => c.other.id === initialRecipient.id);
+        if (existing) { openConversation(existing); if (onClearRecipient) onClearRecipient(); }
+        else { await startConversation(initialRecipient); if (onClearRecipient) onClearRecipient(); }
+      }
+    };
+    init();
+  }, []);
+
+  const openConversation = async (conv) => {
+    setActiveConv(conv);
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", conv.id)
+      .order("created_at", { ascending: true });
+    setMessages(data || []);
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+  };
+
+  const startConversation = async (recipient) => {
+    const a = session.user.id < recipient.id ? session.user.id : recipient.id;
+    const b = session.user.id < recipient.id ? recipient.id : session.user.id;
+    const { data: existing } = await supabase.from("conversations").select("*").eq("participant_a", a).eq("participant_b", b).maybeSingle();
+    if (existing) {
+      const conv = { ...existing, other: recipient };
+      setActiveConv(conv);
+      await openConversation(conv);
+      return;
+    }
+    const { data: created } = await supabase.from("conversations").insert({ participant_a: a, participant_b: b }).select().single();
+    if (created) {
+      const conv = { ...created, other: recipient };
+      setConversations((prev) => [conv, ...prev]);
+      setActiveConv(conv);
+      setMessages([]);
+    }
+  };
+
+  const searchUser = async () => {
+    if (!newRecipientUsername.trim()) return;
+    setSearching(true);
+    const { data } = await supabase.from("profiles").select("id, username, avatar_url").ilike("username", newRecipientUsername.trim()).neq("id", session.user.id).limit(1).maybeSingle();
+    setSearchResult(data || "none");
+    setSearching(false);
+  };
+
+  const sendMessage = async () => {
+    if (!draft.trim() || !activeConv || sending) return;
+    setSending(true);
+    const { data } = await supabase.from("messages").insert({ conversation_id: activeConv.id, sender_id: session.user.id, content: draft.trim() }).select().single();
+    if (data) {
+      setMessages((prev) => [...prev, data]);
+      setDraft("");
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+    setSending(false);
+  };
+
+  if (loading) return (
+    <div className="max-w-3xl mx-auto px-6 py-24 text-center">
+      <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>Chargement...</p>
+    </div>
+  );
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 view-enter">
+      <div className="flex items-center gap-3 mb-8">
+        <Mail size={18} style={{ color: "var(--wine)" }} />
+        <h1 className="font-display italic text-3xl" style={{ color: "var(--ink)" }}>Messages privés</h1>
+      </div>
+
+      <div className="grid md:grid-cols-[280px_1fr] gap-6" style={{ minHeight: 480 }}>
+        {/* Sidebar : conversation list */}
+        <aside className="flex flex-col gap-3">
+          {/* New conversation search */}
+          <div className="p-3 rounded-lg border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] mb-2" style={{ color: "var(--sage)" }}>
+              Nouvelle conversation
+            </p>
+            <div className="flex gap-2">
+              <input
+                value={newRecipientUsername}
+                onChange={(e) => { setNewRecipientUsername(e.target.value); setSearchResult(null); }}
+                onKeyDown={(e) => e.key === "Enter" && searchUser()}
+                placeholder="Nom d'utilisateur..."
+                className="flex-1 font-ui text-sm px-3 py-2 rounded-md border bg-transparent outline-none"
+                style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              />
+              <button
+                onClick={searchUser}
+                disabled={searching}
+                className="font-ui text-xs px-3 py-2 rounded-md transition-opacity disabled:opacity-50"
+                style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+              >
+                {searching ? "..." : "OK"}
+              </button>
+            </div>
+            {searchResult && searchResult !== "none" && (
+              <button
+                onClick={() => { startConversation(searchResult); setNewRecipientUsername(""); setSearchResult(null); }}
+                className="flex items-center gap-2 mt-2 w-full text-left p-2 rounded-md transition-colors hover:opacity-80"
+                style={{ background: "var(--paper)" }}
+              >
+                <AuthorBadge avatarUrl={searchResult.avatar_url} letter={searchResult.username.charAt(0).toUpperCase()} color="var(--sage)" size={26} />
+                <span className="font-ui text-sm" style={{ color: "var(--ink)" }}>{searchResult.username}</span>
+              </button>
+            )}
+            {searchResult === "none" && (
+              <p className="font-ui text-xs mt-2" style={{ color: "var(--ink-light)" }}>Aucun utilisateur trouvé.</p>
+            )}
+          </div>
+
+          {/* Conversations list */}
+          {conversations.length === 0 ? (
+            <p className="font-ui text-sm px-1" style={{ color: "var(--ink-light)" }}>Aucune conversation pour l'instant.</p>
+          ) : (
+            conversations.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => openConversation(c)}
+                className="flex items-center gap-3 p-3 rounded-lg border text-left transition-colors hover:shadow-sm"
+                style={{
+                  background: activeConv?.id === c.id ? "var(--ink)" : "var(--paper-warm)",
+                  borderColor: activeConv?.id === c.id ? "var(--ink)" : "var(--rule)",
+                }}
+              >
+                <AuthorBadge avatarUrl={c.other.avatar_url} letter={c.other.username.charAt(0).toUpperCase()} color="var(--wine)" size={32} />
+                <div className="min-w-0">
+                  <p className="font-ui text-sm font-medium truncate" style={{ color: activeConv?.id === c.id ? "var(--paper-warm)" : "var(--ink)" }}>
+                    {c.other.username}
+                  </p>
+                  <p className="font-mono text-xs" style={{ color: activeConv?.id === c.id ? "rgba(255,255,255,0.5)" : "var(--ink-light)" }}>
+                    {timeAgo(c.last_message_at)}
+                  </p>
+                </div>
+              </button>
+            ))
+          )}
+        </aside>
+
+        {/* Chat area */}
+        {activeConv ? (
+          <div className="flex flex-col rounded-lg border overflow-hidden" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)", minHeight: 400 }}>
+            {/* Header */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: "var(--rule)" }}>
+              <AuthorBadge avatarUrl={activeConv.other.avatar_url} letter={activeConv.other.username.charAt(0).toUpperCase()} color="var(--wine)" size={30} />
+              <span className="font-display italic text-lg" style={{ color: "var(--ink)" }}>{activeConv.other.username}</span>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4" style={{ maxHeight: 440 }}>
+              {messages.length === 0 && (
+                <p className="font-ui text-sm text-center mt-8" style={{ color: "var(--ink-light)" }}>
+                  Début de la conversation avec {activeConv.other.username}.
+                </p>
+              )}
+              {messages.map((m) => {
+                const isMine = m.sender_id === session.user.id;
+                return (
+                  <div key={m.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className="max-w-[75%] px-4 py-2.5 rounded-2xl font-ui text-sm leading-relaxed"
+                      style={{
+                        background: isMine ? "var(--wine)" : "var(--paper)",
+                        color: isMine ? "var(--paper-warm)" : "var(--ink)",
+                        borderRadius: isMine ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                      }}
+                    >
+                      {m.content}
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="flex gap-2 p-3 border-t" style={{ borderColor: "var(--rule)" }}>
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                placeholder="Écrire un message..."
+                className="flex-1 font-ui text-sm px-4 py-2.5 rounded-full border bg-transparent outline-none"
+                style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!draft.trim() || sending}
+                className="flex items-center gap-1.5 font-ui text-sm px-4 py-2.5 rounded-full disabled:opacity-30 transition-opacity"
+                style={{ background: "var(--wine)", color: "var(--paper-warm)" }}
+              >
+                <Send size={14} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center rounded-lg border" style={{ borderColor: "var(--rule)", minHeight: 300 }}>
+            <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>
+              Sélectionne une conversation
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ModerationView({ collections, freePoems, refresh }) {
   const [reports, setReports] = useState([]);
   const [commentsMap, setCommentsMap] = useState({});
@@ -2605,6 +2879,7 @@ export default function App() {
   const [freePoems, setFreePoems] = useState([]);
   const [editingDraft, setEditingDraft] = useState(null);
   const [authorId, setAuthorId] = useState(null);
+  const [dmRecipient, setDmRecipient] = useState(null);
 
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("dark_mode") === "1");
   useEffect(() => {
@@ -2645,7 +2920,7 @@ export default function App() {
     const { data: cols, error: colsError } = await supabase
       .from("collections")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("updated_at", { ascending: false });
     const { data: poems, error: poemsError } = await supabase
       .from("poems")
       .select("*")
@@ -2678,6 +2953,7 @@ export default function App() {
 
     const free = poems
       .filter((p) => !p.collection_id && p.status === "published")
+      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
       .map((p) => ({ ...p, lines: p.content.split("\n"), authorAvatar: p.author_id ? avatarMap[p.author_id] : null }));
     setFreePoems(free);
 
@@ -2753,6 +3029,11 @@ export default function App() {
     if (!id) return;
     setAuthorId(id);
     setView("author");
+  };
+
+  const goToDM = (recipient) => {
+    setDmRecipient(recipient);
+    setView("dm");
   };
 
   const goToPoem = (poemId) => {
@@ -2895,6 +3176,7 @@ export default function App() {
             collections={collections}
             openCollection={openCollection}
             back={() => setView("home")}
+            goToDM={goToDM}
           />
         )}
         {view === "following" && session && (
@@ -2912,6 +3194,14 @@ export default function App() {
             freePoems={freePoems}
             goToAuthor={goToAuthor}
             goToPoem={goToPoem}
+          />
+        )}
+        {view === "dm" && session && (
+          <DMView
+            session={session}
+            profile={profile}
+            initialRecipient={dmRecipient}
+            onClearRecipient={() => setDmRecipient(null)}
           />
         )}
       </div>
