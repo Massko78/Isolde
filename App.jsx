@@ -13,6 +13,17 @@ function getVoterId(session) {
   return id;
 }
 
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "à l'instant";
+  if (mins < 60) return `il y a ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `il y a ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `il y a ${days} j`;
+}
+
 
 function WaxSeal({ letter, color, size = 36 }) {
   return (
@@ -116,7 +127,10 @@ function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWr
     { key: "home", label: "Découvrir", icon: BookOpen },
     { key: "write", label: "Écrire", icon: PenLine },
   ];
-  if (session) items.push({ key: "following", label: "Abonnements", icon: Users });
+  if (session) {
+    items.push({ key: "following", label: "Abonnements", icon: Users });
+    items.push({ key: "interactions", label: "Interactions", icon: MessageCircle });
+  }
 
   return (
     <header
@@ -287,38 +301,35 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
           </div>
           <div className="grid sm:grid-cols-2 gap-5">
             {topLiked.map((p) => {
-              const idx = p.collection ? p.collection.poems.findIndex((x) => x.id === p.id) : 0;
-              const seal = p.collection ? p.collection.seal : (p.author || "?").charAt(0).toUpperCase();
-              const sealColor = p.collection ? p.collection.sealColor : "#8B3A4A";
-              const authorAvatar = p.collection ? p.collection.authorAvatar : p.authorAvatar;
+              const idx = p.collection.poems.findIndex((x) => x.id === p.id);
               return (
                 <button
                   key={p.id}
-                  onClick={() => (p.collection ? openCollection(p.collection, idx) : openFreePoem(p))}
+                  onClick={() => openCollection(p.collection, idx)}
                   className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm flex items-center justify-between gap-4"
                   style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
                 >
                   <div className="flex items-center gap-4">
-                    <AuthorBadge avatarUrl={authorAvatar} letter={seal} color={sealColor} />
+                    <AuthorBadge avatarUrl={p.collection.authorAvatar} letter={p.collection.seal} color={p.collection.sealColor} />
                     <div>
                       <h3 className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
                         {p.title}
                       </h3>
                       <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                        {p.collection ? p.collection.title : "Poème libre"} ·{" "}
-                        {(p.collection ? p.collection.author_id : p.author_id) ? (
+                        {p.collection.title} ·{" "}
+                        {p.collection.author_id ? (
                           <span
                             role="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              goToAuthor(p.collection ? p.collection.author_id : p.author_id);
+                              goToAuthor(p.collection.author_id);
                             }}
                             className="hover:underline"
                           >
-                            {p.collection ? p.collection.author : p.author}
+                            {p.collection.author}
                           </span>
                         ) : (
-                          p.collection ? p.collection.author : p.author
+                          p.collection.author
                         )}
                       </p>
                     </div>
@@ -484,6 +495,8 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
   const [shareCopied, setShareCopied] = useState(false);
   const [poemReported, setPoemReported] = useState(false);
   const [commentError, setCommentError] = useState("");
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyDraft, setReplyDraft] = useState("");
 
   const canManage = session && (profile?.is_moderator || collection.author_id === session.user.id);
 
@@ -624,8 +637,8 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
     onDeleted();
   };
 
-  const submitComment = async () => {
-    if (!draft.trim()) return;
+  const submitComment = async (content, parentId = null) => {
+    if (!content.trim()) return;
     const lastTime = parseInt(localStorage.getItem("last_comment_time") || "0", 10);
     const elapsed = Date.now() - lastTime;
     if (elapsed < 30000) {
@@ -635,16 +648,22 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
     setCommentError("");
     const newComment = {
       poem_id: poem.id,
+      parent_id: parentId,
       author: commentAnon ? null : profile?.username || "Anonyme",
       author_id: commentAnon ? null : session?.user?.id || null,
       anonymous: commentAnon,
-      content: draft.trim(),
+      content: content.trim(),
     };
     const { data, error } = await supabase.from("comments").insert(newComment).select().single();
     if (!error && data) {
       setComments((prev) => [...prev, { ...data, authorAvatar: commentAnon ? null : profile?.avatar_url }]);
-      setDraft("");
       localStorage.setItem("last_comment_time", String(Date.now()));
+      if (parentId) {
+        setReplyingTo(null);
+        setReplyDraft("");
+      } else {
+        setDraft("");
+      }
     }
   };
 
@@ -982,37 +1001,110 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
               {comments.length} commentaire{comments.length === 1 ? "" : "s"}
             </p>
 
-            <div className="flex flex-col gap-4 mb-6">
-              {comments.map((c) => (
-                <div key={c.id} className="flex gap-3 group">
-                  <AuthorBadge
-                    avatarUrl={c.anonymous ? null : c.authorAvatar}
-                    letter={c.anonymous ? "?" : (c.author || "?").charAt(0)}
-                    color={c.anonymous ? "var(--ink-light)" : "var(--sage)"}
-                    size={28}
-                  />
-                  <div className="flex-1">
-                    <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
-                      {c.anonymous ? "Anonyme" : c.author}
-                    </p>
-                    <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
-                      {c.content}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    {!profile?.is_moderator && (
-                      <button onClick={() => handleReportComment(c.id)} title="Signaler ce commentaire">
-                        <Flag size={13} style={{ color: "var(--ink-light)" }} />
-                      </button>
+            <div className="flex flex-col gap-5 mb-6">
+              {comments
+                .filter((c) => !c.parent_id)
+                .map((c) => (
+                  <div key={c.id} className="flex flex-col gap-3">
+                    <div className="flex gap-3 group">
+                      <AuthorBadge
+                        avatarUrl={c.anonymous ? null : c.authorAvatar}
+                        letter={c.anonymous ? "?" : (c.author || "?").charAt(0)}
+                        color={c.anonymous ? "var(--ink-light)" : "var(--sage)"}
+                        size={28}
+                      />
+                      <div className="flex-1">
+                        <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
+                          {c.anonymous ? "Anonyme" : c.author}
+                        </p>
+                        <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
+                          {c.content}
+                        </p>
+                        {session && (
+                          <button
+                            onClick={() => setReplyingTo(replyingTo === c.id ? null : c.id)}
+                            className="font-ui text-xs mt-1 transition-opacity hover:opacity-70"
+                            style={{ color: "var(--sage)" }}
+                          >
+                            Répondre
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        {!profile?.is_moderator && (
+                          <button onClick={() => handleReportComment(c.id)} title="Signaler ce commentaire">
+                            <Flag size={13} style={{ color: "var(--ink-light)" }} />
+                          </button>
+                        )}
+                        {profile?.is_moderator && (
+                          <button onClick={() => handleDeleteComment(c.id)} title="Supprimer ce commentaire">
+                            <Trash2 size={13} style={{ color: "var(--wine)" }} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Replies */}
+                    {comments.filter((r) => r.parent_id === c.id).length > 0 && (
+                      <div className="flex flex-col gap-3 pl-10 border-l" style={{ borderColor: "var(--rule)" }}>
+                        {comments
+                          .filter((r) => r.parent_id === c.id)
+                          .map((r) => (
+                            <div key={r.id} className="flex gap-3 group">
+                              <AuthorBadge
+                                avatarUrl={r.anonymous ? null : r.authorAvatar}
+                                letter={r.anonymous ? "?" : (r.author || "?").charAt(0)}
+                                color={r.anonymous ? "var(--ink-light)" : "var(--sage)"}
+                                size={24}
+                              />
+                              <div className="flex-1">
+                                <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
+                                  {r.anonymous ? "Anonyme" : r.author}
+                                </p>
+                                <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
+                                  {r.content}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                {!profile?.is_moderator && (
+                                  <button onClick={() => handleReportComment(r.id)} title="Signaler ce commentaire">
+                                    <Flag size={13} style={{ color: "var(--ink-light)" }} />
+                                  </button>
+                                )}
+                                {profile?.is_moderator && (
+                                  <button onClick={() => handleDeleteComment(r.id)} title="Supprimer ce commentaire">
+                                    <Trash2 size={13} style={{ color: "var(--wine)" }} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
                     )}
-                    {profile?.is_moderator && (
-                      <button onClick={() => handleDeleteComment(c.id)} title="Supprimer ce commentaire">
-                        <Trash2 size={13} style={{ color: "var(--wine)" }} />
-                      </button>
+
+                    {/* Reply box */}
+                    {replyingTo === c.id && (
+                      <div className="flex items-center gap-2 pl-10">
+                        <input
+                          value={replyDraft}
+                          onChange={(e) => setReplyDraft(e.target.value)}
+                          placeholder="Répondre..."
+                          className="flex-1 font-ui text-sm px-4 py-2 rounded-full border bg-transparent outline-none focus:ring-1"
+                          style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+                        />
+                        <button
+                          onClick={() => submitComment(replyDraft, c.id)}
+                          disabled={!replyDraft.trim()}
+                          className="flex items-center gap-1.5 font-ui text-xs px-4 py-2 rounded-full disabled:opacity-30 transition-opacity"
+                          style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+                        >
+                          <Send size={12} />
+                          Envoyer
+                        </button>
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                ))}
               {comments.length === 0 && (
                 <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
                   Aucun commentaire pour le moment — le premier mot est pour vous.
@@ -1047,7 +1139,7 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                   Commenter en anonyme
                 </label>
                 <button
-                  onClick={submitComment}
+                  onClick={() => submitComment(draft)}
                   disabled={!draft.trim()}
                   className="flex items-center gap-2 font-ui text-sm px-4 py-2 rounded-full disabled:opacity-30 transition-opacity"
                   style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
@@ -2105,6 +2197,257 @@ function FollowingView({ session, collections, openCollection, goToAuthor }) {
   );
 }
 
+function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoem }) {
+  const [likes, setLikes] = useState(null);
+  const [comments, setComments] = useState(null);
+  const [replies, setReplies] = useState(null);
+
+  const myPoems = [
+    ...collections.filter((c) => c.author_id === session.user.id).flatMap((c) => c.poems),
+    ...(freePoems || []).filter((p) => p.author_id === session.user.id),
+  ];
+  const myPoemIds = myPoems.map((p) => p.id);
+
+  const findPoemTitle = (poemId) => {
+    for (const c of collections) {
+      const p = c.poems.find((x) => x.id === poemId);
+      if (p) return p.title;
+    }
+    const fp = (freePoems || []).find((p) => p.id === poemId);
+    return fp ? fp.title : "ce poème";
+  };
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      // Likes received on my poems
+      if (myPoemIds.length > 0) {
+        const { data: likeRows } = await supabase
+          .from("likes")
+          .select("*")
+          .in("poem_id", myPoemIds)
+          .neq("voter_id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(40);
+        const likeList = likeRows || [];
+        const userIds = [...new Set(likeList.map((l) => l.voter_id).filter((id) => !id.startsWith("anon-")))];
+        let profMap = {};
+        if (userIds.length > 0) {
+          const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
+          (profs || []).forEach((p) => { profMap[p.id] = p; });
+        }
+        if (active) setLikes(likeList.map((l) => ({ ...l, voterProfile: profMap[l.voter_id] || null })));
+
+        // Comments received on my poems
+        const { data: commentRows } = await supabase
+          .from("comments")
+          .select("*")
+          .in("poem_id", myPoemIds)
+          .is("parent_id", null)
+          .order("created_at", { ascending: false })
+          .limit(40);
+        const commentList = (commentRows || []).filter((c) => c.author_id !== session.user.id);
+        const cAuthorIds = [...new Set(commentList.map((c) => c.author_id).filter(Boolean))];
+        let avatarMap = {};
+        if (cAuthorIds.length > 0) {
+          const { data: profs } = await supabase.from("profiles").select("id, avatar_url").in("id", cAuthorIds);
+          (profs || []).forEach((p) => { avatarMap[p.id] = p.avatar_url; });
+        }
+        if (active) setComments(commentList.map((c) => ({ ...c, authorAvatar: c.author_id ? avatarMap[c.author_id] : null })));
+      } else {
+        if (active) { setLikes([]); setComments([]); }
+      }
+
+      // Replies to my comments
+      const { data: myCommentRows } = await supabase.from("comments").select("id, poem_id").eq("author_id", session.user.id);
+      const myCommentIds = (myCommentRows || []).map((c) => c.id);
+      if (myCommentIds.length > 0) {
+        const { data: replyRows } = await supabase
+          .from("comments")
+          .select("*")
+          .in("parent_id", myCommentIds)
+          .order("created_at", { ascending: false })
+          .limit(40);
+        const replyList = (replyRows || []).filter((r) => r.author_id !== session.user.id);
+        const rAuthorIds = [...new Set(replyList.map((c) => c.author_id).filter(Boolean))];
+        let avatarMap2 = {};
+        if (rAuthorIds.length > 0) {
+          const { data: profs } = await supabase.from("profiles").select("id, avatar_url").in("id", rAuthorIds);
+          (profs || []).forEach((p) => { avatarMap2[p.id] = p.avatar_url; });
+        }
+        if (active) setReplies(replyList.map((c) => ({ ...c, authorAvatar: c.author_id ? avatarMap2[c.author_id] : null })));
+      } else {
+        if (active) setReplies([]);
+      }
+    };
+    load();
+    return () => { active = false; };
+  }, [session.user.id]);
+
+  const loading = likes === null || comments === null || replies === null;
+  const totalUnseen = (likes?.length || 0) + (comments?.length || 0) + (replies?.length || 0);
+
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
+      <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
+        Activité
+      </p>
+      <h1 className="font-display italic text-3xl mb-10" style={{ color: "var(--ink)" }}>
+        Interactions
+      </h1>
+
+      {loading ? (
+        <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Chargement...</p>
+      ) : totalUnseen === 0 ? (
+        <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>
+          Rien pour l'instant — publie un poème pour commencer à recevoir des retours.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-14">
+
+          {/* Likes */}
+          {likes.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-5">
+                <Heart size={15} fill="var(--wine)" stroke="var(--wine)" />
+                <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+                  Likes reçus
+                </h2>
+                <span className="font-mono text-xs px-2 py-0.5 rounded-full ml-1" style={{ background: "var(--wine)", color: "var(--paper-warm)" }}>
+                  {likes.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {likes.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => goToPoem(l.poem_id)}
+                    className="flex items-center justify-between gap-4 p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
+                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <AuthorBadge
+                        avatarUrl={l.voterProfile?.avatar_url}
+                        letter={l.voterProfile?.username?.charAt(0).toUpperCase() || "?"}
+                        color="var(--wine)"
+                        size={30}
+                      />
+                      <p className="font-ui text-sm truncate" style={{ color: "var(--ink)" }}>
+                        <span
+                          className="font-medium hover:underline"
+                          role="button"
+                          onClick={(e) => { e.stopPropagation(); if (l.voterProfile) goToAuthor(l.voter_id); }}
+                        >
+                          {l.voterProfile?.username || "Quelqu'un"}
+                        </span>
+                        {" a aimé "}
+                        <span className="font-display italic">« {findPoemTitle(l.poem_id)} »</span>
+                      </p>
+                    </div>
+                    <span className="font-mono text-xs shrink-0" style={{ color: "var(--ink-light)" }}>
+                      {timeAgo(l.created_at)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Comments */}
+          {comments.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-5">
+                <MessageCircle size={15} style={{ color: "var(--sage)" }} />
+                <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+                  Commentaires sur tes poèmes
+                </h2>
+                <span className="font-mono text-xs px-2 py-0.5 rounded-full ml-1" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
+                  {comments.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-3">
+                {comments.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => goToPoem(c.poem_id)}
+                    className="flex items-start gap-3 p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
+                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+                  >
+                    <AuthorBadge
+                      avatarUrl={c.anonymous ? null : c.authorAvatar}
+                      letter={c.anonymous ? "?" : (c.author || "?").charAt(0)}
+                      color={c.anonymous ? "var(--ink-light)" : "var(--sage)"}
+                      size={30}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-ui text-xs mb-1" style={{ color: "var(--ink-light)" }}>
+                        <span className="font-medium" style={{ color: "var(--ink)" }}>
+                          {c.anonymous ? "Anonyme" : c.author}
+                        </span>
+                        {" · "}
+                        <span className="font-display italic">« {findPoemTitle(c.poem_id)} »</span>
+                        {" · "}
+                        {timeAgo(c.created_at)}
+                      </p>
+                      <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
+                        {c.content}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Replies */}
+          {replies.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-5">
+                <MessageCircle size={15} style={{ color: "var(--ink-light)" }} />
+                <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+                  Réponses à tes commentaires
+                </h2>
+                <span className="font-mono text-xs px-2 py-0.5 rounded-full ml-1" style={{ background: "var(--rule)", color: "var(--ink)" }}>
+                  {replies.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-3">
+                {replies.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => goToPoem(r.poem_id)}
+                    className="flex items-start gap-3 p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
+                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+                  >
+                    <AuthorBadge
+                      avatarUrl={r.anonymous ? null : r.authorAvatar}
+                      letter={r.anonymous ? "?" : (r.author || "?").charAt(0)}
+                      color={r.anonymous ? "var(--ink-light)" : "var(--sage)"}
+                      size={30}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-ui text-xs mb-1" style={{ color: "var(--ink-light)" }}>
+                        <span className="font-medium" style={{ color: "var(--ink)" }}>
+                          {r.anonymous ? "Anonyme" : r.author}
+                        </span>
+                        {" a répondu · "}
+                        {timeAgo(r.created_at)}
+                      </p>
+                      <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
+                        {r.content}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ModerationView({ collections, freePoems, refresh }) {
   const [reports, setReports] = useState([]);
   const [commentsMap, setCommentsMap] = useState({});
@@ -2412,6 +2755,18 @@ export default function App() {
     setView("author");
   };
 
+  const goToPoem = (poemId) => {
+    for (const c of collections) {
+      const idx = c.poems.findIndex((p) => p.id === poemId);
+      if (idx !== -1) {
+        openCollection(c, idx);
+        return;
+      }
+    }
+    const freePoem = freePoems.find((p) => p.id === poemId);
+    if (freePoem) openFreePoem(freePoem);
+  };
+
   const editDraft = (draft) => {
     setEditingDraft(draft);
     setView("write");
@@ -2548,6 +2903,15 @@ export default function App() {
             collections={collections}
             openCollection={openCollection}
             goToAuthor={goToAuthor}
+          />
+        )}
+        {view === "interactions" && session && (
+          <InteractionsView
+            session={session}
+            collections={collections}
+            freePoems={freePoems}
+            goToAuthor={goToAuthor}
+            goToPoem={goToPoem}
           />
         )}
       </div>
