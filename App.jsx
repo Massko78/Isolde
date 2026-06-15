@@ -242,6 +242,7 @@ function AuthorBadge({ avatarUrl, letter, color, size = 36 }) {
 function TopNav({ view, setView, session, profile, goToWrite, notifCount, dmCount, discoverNewCount, onOpenDiscover }) {
   const items = [
     { key: "home", label: "Découvrir", icon: BookOpen, badge: discoverNewCount },
+    { key: "library", label: "Inspiration", icon: Bookmark },
     { key: "write", label: "Écrire", icon: PenLine },
   ];
   if (session) {
@@ -3683,6 +3684,356 @@ function CollabView({ session, profile, collections, openCollection, refresh }) 
   );
 }
 
+function LibraryView({ session, profile, goToAuth }) {
+  const [poems, setPoems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [selectedTheme, setSelectedTheme] = useState(null);
+  const [selectedPeriod, setSelectedPeriod] = useState(null);
+  const [openPoem, setOpenPoem] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [commentAnon, setCommentAnon] = useState(false);
+  const [sendingComment, setSendingComment] = useState(false);
+  const [addingPoem, setAddingPoem] = useState(false);
+
+  // Add poem form (moderator)
+  const [newTitle, setNewTitle] = useState("");
+  const [newAuthor, setNewAuthor] = useState("");
+  const [newContent, setNewContent] = useState("");
+  const [newPeriod, setNewPeriod] = useState("");
+  const [newThemes, setNewThemes] = useState("");
+  const [newNationality, setNewNationality] = useState("Française");
+  const [addMsg, setAddMsg] = useState("");
+
+  useEffect(() => {
+    supabase.from("classic_poems").select("*").order("author").then(({ data }) => {
+      setPoems(data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!openPoem) return;
+    supabase.from("classic_comments").select("*").eq("poem_id", openPoem.id).order("created_at", { ascending: true }).then(({ data }) => {
+      setComments(data || []);
+    });
+  }, [openPoem?.id]);
+
+  const allThemes = [...new Set(poems.flatMap(p => p.themes || []))].sort();
+  const allPeriods = [...new Set(poems.map(p => p.period).filter(Boolean))].sort();
+
+  const filtered = poems.filter(p => {
+    const q = query.toLowerCase();
+    const matchQuery = !q || p.title.toLowerCase().includes(q) || p.author.toLowerCase().includes(q) || p.content.toLowerCase().includes(q) || (p.themes || []).some(t => t.includes(q));
+    const matchTheme = !selectedTheme || (p.themes || []).includes(selectedTheme);
+    const matchPeriod = !selectedPeriod || p.period === selectedPeriod;
+    return matchQuery && matchTheme && matchPeriod;
+  });
+
+  // Group by author
+  const byAuthor = {};
+  filtered.forEach(p => {
+    if (!byAuthor[p.author]) byAuthor[p.author] = [];
+    byAuthor[p.author].push(p);
+  });
+
+  const submitComment = async () => {
+    if (!commentDraft.trim() || !openPoem) return;
+    setSendingComment(true);
+    const { data } = await supabase.from("classic_comments").insert({
+      poem_id: openPoem.id,
+      author: commentAnon ? null : profile?.username || "Anonyme",
+      author_id: commentAnon ? null : session?.user?.id || null,
+      anonymous: commentAnon,
+      content: commentDraft.trim(),
+    }).select().single();
+    if (data) {
+      setComments(prev => [...prev, data]);
+      setCommentDraft("");
+    }
+    setSendingComment(false);
+  };
+
+  const addClassicPoem = async () => {
+    if (!newTitle.trim() || !newAuthor.trim() || !newContent.trim()) return;
+    const { error } = await supabase.from("classic_poems").insert({
+      title: newTitle.trim(),
+      author: newAuthor.trim(),
+      content: newContent,
+      period: newPeriod.trim() || null,
+      nationality: newNationality.trim() || null,
+      themes: newThemes.split(",").map(t => t.trim()).filter(Boolean),
+    });
+    if (error) { setAddMsg("Erreur : " + error.message); return; }
+    setAddMsg("Poème ajouté !");
+    setNewTitle(""); setNewAuthor(""); setNewContent(""); setNewPeriod(""); setNewThemes("");
+    const { data } = await supabase.from("classic_poems").select("*").order("author");
+    setPoems(data || []);
+  };
+
+  if (openPoem) {
+    const lines = openPoem.content.split("\n");
+    const strophes = [];
+    let current = [];
+    lines.forEach(l => {
+      if (l.trim() === "") { if (current.length) { strophes.push(current); current = []; } }
+      else { current.push(l); }
+    });
+    if (current.length) strophes.push(current);
+
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-10 view-enter">
+        <button onClick={() => setOpenPoem(null)} className="flex items-center gap-2 font-ui text-sm mb-8 hover:opacity-70 transition-opacity" style={{ color: "var(--ink-light)" }}>
+          <ArrowLeft size={15} /> Bibliothèque
+        </button>
+
+        {/* Poem header */}
+        <div className="mb-8 pb-6 border-b" style={{ borderColor: "var(--rule)" }}>
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            {openPoem.period && (
+              <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: `${colorFromString(openPoem.author)}22`, color: colorFromString(openPoem.author), border: `1px solid ${colorFromString(openPoem.author)}44` }}>
+                {openPoem.period}
+              </span>
+            )}
+            {(openPoem.themes || []).slice(0, 3).map(t => (
+              <span key={t} className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}>
+                {t}
+              </span>
+            ))}
+          </div>
+          <h1 className="font-display italic mb-2" style={{ fontSize: "clamp(1.6rem,4vw,2.6rem)", color: "var(--ink)" }}>
+            {openPoem.title}
+          </h1>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center font-display italic text-sm" style={{ background: colorFromString(openPoem.author), color: "var(--paper-warm)" }}>
+              {openPoem.author.charAt(0)}
+            </div>
+            <div>
+              <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>{openPoem.author}</p>
+              <p className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+                {openPoem.birth_year && openPoem.death_year ? `${openPoem.birth_year} – ${openPoem.death_year}` : ""}{openPoem.nationality ? ` · ${openPoem.nationality}` : ""}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Poem text */}
+        <div className="mb-12">
+          {strophes.map((strophe, si) => (
+            <div key={si} className="mb-8">
+              {strophe.map((line, li) => (
+                <p key={li} className="font-display italic leading-relaxed" style={{ fontSize: "clamp(1rem,2.2vw,1.2rem)", color: "var(--ink)", lineHeight: "2rem" }}>
+                  {line}
+                </p>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Comments */}
+        <div className="border-t pt-8" style={{ borderColor: "var(--rule)" }}>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] mb-6 flex items-center gap-2" style={{ color: "var(--sage)" }}>
+            <MessageCircle size={12} /> {comments.length} commentaire{comments.length === 1 ? "" : "s"}
+          </p>
+
+          {comments.length > 0 && (
+            <div className="flex flex-col gap-4 mb-6">
+              {comments.map(c => (
+                <div key={c.id} className="flex gap-3">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center font-display italic text-xs shrink-0" style={{ background: c.anonymous ? "var(--rule)" : colorFromString(c.author || "?"), color: "var(--paper-warm)" }}>
+                    {c.anonymous ? "?" : (c.author || "?").charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
+                      {c.anonymous ? "Anonyme" : c.author} · {timeAgo(c.created_at)}
+                    </p>
+                    <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>{c.content}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Comment box */}
+          <div className="flex flex-col gap-3 p-4 rounded-xl border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+            <textarea
+              value={commentDraft}
+              onChange={e => setCommentDraft(e.target.value)}
+              placeholder={session ? "Partage ton ressenti sur ce poème..." : "Connecte-toi pour commenter"}
+              rows={3}
+              disabled={!session}
+              className="font-ui text-sm bg-transparent outline-none resize-none"
+              style={{ color: "var(--ink)" }}
+            />
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <label className="flex items-center gap-2 font-ui text-xs cursor-pointer" style={{ color: "var(--ink-light)" }}>
+                <input type="checkbox" checked={commentAnon} onChange={e => setCommentAnon(e.target.checked)} />
+                <EyeOff size={12} /> Anonyme
+              </label>
+              {session ? (
+                <button onClick={submitComment} disabled={!commentDraft.trim() || sendingComment}
+                  className="flex items-center gap-1.5 font-ui text-xs px-4 py-2 rounded-full disabled:opacity-30 transition-opacity"
+                  style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
+                  <Send size={12} /> {sendingComment ? "..." : "Commenter"}
+                </button>
+              ) : (
+                <button onClick={goToAuth} className="font-ui text-xs px-4 py-2 rounded-full" style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
+                  Se connecter
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-10 view-enter">
+      {/* Header */}
+      <div className="mb-10">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] mb-3" style={{ color: "var(--sage)" }}>
+          Bibliothèque
+        </p>
+        <h1 className="font-display italic mb-2" style={{ fontSize: "clamp(2rem,5vw,3rem)", color: "var(--ink)" }}>
+          Inspiration
+        </h1>
+        <p className="font-ui text-sm" style={{ color: "var(--ink-light)", maxWidth: 500 }}>
+          Les plus grands poèmes de la littérature mondiale — pour lire, s'inspirer, commenter.
+        </p>
+      </div>
+
+      {/* Search */}
+      <div className="relative mb-5">
+        <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: "var(--ink-light)" }} />
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Chercher par titre, auteur, mot-clé, thème..."
+          className="w-full font-ui text-sm pl-10 pr-4 py-3 rounded-full border bg-transparent outline-none"
+          style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+        />
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-2 flex-wrap mb-8">
+        {allPeriods.map(p => (
+          <button key={p} onClick={() => setSelectedPeriod(selectedPeriod === p ? null : p)}
+            className="font-mono text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full transition-all"
+            style={{
+              background: selectedPeriod === p ? "var(--ink)" : "transparent",
+              color: selectedPeriod === p ? "var(--paper-warm)" : "var(--ink-light)",
+              border: `1px solid ${selectedPeriod === p ? "var(--ink)" : "var(--rule)"}`,
+            }}>
+            {p}
+          </button>
+        ))}
+        <div className="w-px mx-1 self-stretch" style={{ background: "var(--rule)" }} />
+        {allThemes.slice(0, 12).map(t => (
+          <button key={t} onClick={() => setSelectedTheme(selectedTheme === t ? null : t)}
+            className="font-mono text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full transition-all"
+            style={{
+              background: selectedTheme === t ? `${colorFromString(t)}33` : "transparent",
+              color: selectedTheme === t ? colorFromString(t) : "var(--ink-light)",
+              border: `1px solid ${selectedTheme === t ? colorFromString(t) : "var(--rule)"}`,
+            }}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>Chargement...</p>
+      ) : filtered.length === 0 ? (
+        <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Aucun résultat pour « {query} ».</p>
+      ) : (
+        <div className="flex flex-col gap-12">
+          {Object.entries(byAuthor).map(([author, authorPoems]) => {
+            const ac = colorFromString(author);
+            const first = authorPoems[0];
+            return (
+              <div key={author}>
+                {/* Author header */}
+                <div className="flex items-center gap-4 mb-5 pb-4 border-b" style={{ borderColor: "var(--rule)" }}>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center font-display italic text-lg shrink-0" style={{ background: `${ac}22`, color: ac, border: `2px solid ${ac}44` }}>
+                    {author.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-display italic text-xl" style={{ color: "var(--ink)" }}>{author}</p>
+                    <p className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+                      {first.birth_year && first.death_year ? `${first.birth_year} – ${first.death_year} · ` : ""}{first.period} · {first.nationality}
+                    </p>
+                  </div>
+                  <span className="ml-auto font-mono text-xs px-2 py-1 rounded-full" style={{ color: ac, background: `${ac}15`, border: `1px solid ${ac}30` }}>
+                    {authorPoems.length} poème{authorPoems.length > 1 ? "s" : ""}
+                  </span>
+                </div>
+
+                {/* Poems grid */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {authorPoems.map(p => {
+                    const preview = p.content.split("\n").filter(l => l.trim()).slice(0, 3);
+                    return (
+                      <button key={p.id} onClick={() => setOpenPoem(p)}
+                        className="text-left p-5 rounded-xl border transition-all hover:shadow-md group"
+                        style={{ borderColor: "var(--rule)", borderLeft: `3px solid ${ac}`, background: "var(--paper-warm)" }}>
+                        <h3 className="font-display italic text-lg mb-2 group-hover:opacity-80 transition-opacity" style={{ color: "var(--ink)" }}>
+                          {p.title}
+                        </h3>
+                        <div className="font-display italic text-sm leading-relaxed mb-3" style={{ color: "var(--ink-light)" }}>
+                          {preview.map((l, i) => <p key={i}>{l}</p>)}
+                          {p.content.split("\n").filter(l => l.trim()).length > 3 && (
+                            <p style={{ opacity: 0.4, fontSize: 11 }}>…</p>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {(p.themes || []).slice(0, 3).map(t => (
+                            <span key={t} className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}>
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Moderator: add poem */}
+      {profile?.is_moderator && (
+        <div className="mt-16 border-t pt-10" style={{ borderColor: "var(--rule)" }}>
+          <button onClick={() => setAddingPoem(!addingPoem)} className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider mb-6" style={{ color: "var(--sage)" }}>
+            <Zap size={12} /> {addingPoem ? "Fermer" : "Ajouter un poème classique"}
+          </button>
+          {addingPoem && (
+            <div className="flex flex-col gap-4 p-6 rounded-xl border" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Titre *" className="font-display italic text-base px-4 py-3 rounded-md border bg-transparent outline-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+                <input value={newAuthor} onChange={e => setNewAuthor(e.target.value)} placeholder="Auteur *" className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+                <input value={newPeriod} onChange={e => setNewPeriod(e.target.value)} placeholder="Période (ex: Romantisme)" className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+                <input value={newNationality} onChange={e => setNewNationality(e.target.value)} placeholder="Nationalité" className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+                <input value={newThemes} onChange={e => setNewThemes(e.target.value)} placeholder="Thèmes séparés par virgule" className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none sm:col-span-2" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+              </div>
+              <textarea value={newContent} onChange={e => setNewContent(e.target.value)} placeholder={"Coller le texte du poème ici...\n(chaque ligne = un vers, ligne vide = nouvelle strophe)"} rows={10} className="font-display italic px-4 py-3 rounded-md border bg-transparent outline-none resize-none text-base leading-relaxed" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+              {addMsg && <p className="font-ui text-xs" style={{ color: "var(--sage)" }}>{addMsg}</p>}
+              <button onClick={addClassicPoem} disabled={!newTitle.trim() || !newAuthor.trim() || !newContent.trim()}
+                className="self-end font-ui text-sm px-6 py-3 rounded-full disabled:opacity-30 transition-opacity"
+                style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
+                Ajouter à la bibliothèque
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ModerationView({ collections, freePoems, refresh }) {
   const [reports, setReports] = useState([]);
   const [commentsMap, setCommentsMap] = useState({});
@@ -4291,6 +4642,13 @@ export default function App() {
         />
 
         {view === "home" && <HomeView collections={collections} topLiked={topLiked} freePoems={freePoems} openCollection={openCollection} openFreePoem={openFreePoem} goToAuthor={goToAuthor} currentChallenge={currentChallenge} onChallenge={() => { setActiveChallenge(currentChallenge); setView("challenge"); }} />}
+        {view === "library" && (
+          <LibraryView
+            session={session}
+            profile={profile}
+            goToAuth={() => setView("auth")}
+          />
+        )}
         {view === "challenge" && activeChallenge && (
           <ChallengeView
             session={session}
