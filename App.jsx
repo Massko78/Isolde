@@ -109,6 +109,7 @@ function ImageField({ label, value, onChange, session, maxHeightPreview = 220 })
 }
 
 function AuthorBadge({ avatarUrl, letter, color, size = 36 }) {
+  const resolvedColor = color || colorFromString(letter);
   if (avatarUrl) {
     return (
       <img
@@ -119,10 +120,10 @@ function AuthorBadge({ avatarUrl, letter, color, size = 36 }) {
       />
     );
   }
-  return <WaxSeal letter={letter} color={color} size={size} />;
+  return <WaxSeal letter={letter} color={resolvedColor} size={size} />;
 }
 
-function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWrite, notifCount, dmCount }) {
+function TopNav({ view, setView, session, profile, goToWrite, notifCount, dmCount }) {
   const items = [
     { key: "home", label: "Découvrir", icon: BookOpen },
     { key: "write", label: "Écrire", icon: PenLine },
@@ -187,15 +188,6 @@ function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWr
               <span className="hidden sm:inline">Modération</span>
             </button>
           )}
-
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            title={darkMode ? "Passer au thème clair" : "Passer au thème sombre"}
-            className="flex items-center px-2.5 py-2 rounded-full transition-colors"
-            style={{ color: "var(--ink)" }}
-          >
-            {darkMode ? <Sun size={15} strokeWidth={2} /> : <Moon size={15} strokeWidth={2} />}
-          </button>
 
           {session ? (
             <button
@@ -415,65 +407,129 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
             Aucun recueil ne correspond à « {query} ».
           </p>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-5">
-            {filtered.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => openCollection(c, 0)}
-                className="text-left rounded-lg border transition-colors hover:shadow-sm group overflow-hidden"
-                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-              >
-                {c.cover_url && (
-                  <div className="w-full" style={{ height: 120 }}>
-                    <img src={c.cover_url} alt="" className="w-full h-full object-cover" />
-                  </div>
-                )}
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
-                    <span
-                      className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded-full"
-                      style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filtered.map((c) => {
+              const spineColor = c.sealColor || colorFromString(c.title);
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => openCollection(c, 0)}
+                  className="text-left group relative"
+                  style={{ perspective: "600px" }}
+                >
+                  {/* Book wrapper */}
+                  <div
+                    className="relative flex rounded-sm overflow-hidden transition-all duration-300 group-hover:shadow-2xl"
+                    style={{
+                      boxShadow: `4px 4px 20px rgba(0,0,0,0.4), inset -3px 0 6px rgba(0,0,0,0.3)`,
+                      transform: "translateY(0)",
+                      transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.transform = "translateY(-4px) rotateY(-3deg)"}
+                    onMouseLeave={e => e.currentTarget.style.transform = "translateY(0) rotateY(0)"}
+                  >
+                    {/* Spine */}
+                    <div
+                      className="shrink-0 flex flex-col items-center justify-between py-4 px-1.5"
+                      style={{ width: 22, background: spineColor }}
                     >
-                      {c.theme}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3
-                      className="font-display italic text-xl transition-colors"
-                      style={{ color: "var(--ink)" }}
-                    >
-                      {c.title}
-                    </h3>
-                    {c.is_collab && (
-                      <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
-                        <Crown size={10} /> Collab
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-ui text-sm mb-4" style={{ color: "var(--ink-light)" }}>
-                    {c.author_id ? (
-                      <span
-                        role="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          goToAuthor(c.author_id);
+                      <div
+                        className="font-display italic text-[9px] writing-mode-vertical"
+                        style={{
+                          color: "rgba(255,255,255,0.7)",
+                          writingMode: "vertical-rl",
+                          textOrientation: "mixed",
+                          transform: "rotate(180deg)",
+                          letterSpacing: "0.05em",
+                          maxHeight: 100,
+                          overflow: "hidden",
                         }}
-                        className="hover:underline"
                       >
-                        {c.author}
-                      </span>
-                    ) : (
-                      c.author
-                    )}{" "}
-                    · {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"}
-                  </p>
-                  <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
-                    « {c.poems?.[0]?.lines?.find((l) => l) || ""} »
-                  </p>
-                </div>
-              </button>
-            ))}
+                        {c.title}
+                      </div>
+                      <div
+                        className="w-1 h-1 rounded-full"
+                        style={{ background: "rgba(255,255,255,0.3)" }}
+                      />
+                    </div>
+
+                    {/* Cover */}
+                    <div className="flex-1 min-w-0" style={{ background: "var(--paper-warm)" }}>
+                      {c.cover_url ? (
+                        <div className="relative" style={{ height: 140 }}>
+                          <img src={c.cover_url} alt="" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--paper-warm))" }} />
+                        </div>
+                      ) : (
+                        <div
+                          className="flex items-center justify-center"
+                          style={{ height: 100, background: `${spineColor}18` }}
+                        >
+                          <span
+                            className="font-display italic"
+                            style={{ fontSize: 48, color: `${spineColor}40` }}
+                          >
+                            {c.seal}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h3 className="font-display italic text-base leading-tight" style={{ color: "var(--ink)" }}>
+                                {c.title}
+                              </h3>
+                              {c.is_collab && (
+                                <Crown size={10} style={{ color: "var(--sage)", flexShrink: 0 }} />
+                              )}
+                            </div>
+                            <p className="font-ui text-xs mt-0.5" style={{ color: "var(--ink-light)" }}>
+                              {c.author_id ? (
+                                <span role="button" onClick={(e) => { e.stopPropagation(); goToAuthor(c.author_id); }} className="hover:underline">
+                                  {c.author}
+                                </span>
+                              ) : c.author}
+                            </p>
+                          </div>
+                          <span
+                            className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
+                            style={{ color: spineColor, border: `1px solid ${spineColor}50`, background: `${spineColor}15` }}
+                          >
+                            {c.theme}
+                          </span>
+                        </div>
+
+                        <p className="font-display italic text-xs leading-relaxed mb-3" style={{ color: "var(--ink-light)" }}>
+                          « {c.poems?.[0]?.lines?.find((l) => l) || ""} »
+                        </p>
+
+                        <div className="flex items-center gap-3 pt-2 border-t" style={{ borderColor: "var(--rule)" }}>
+                          <span className="font-mono text-[10px]" style={{ color: "var(--ink-light)" }}>
+                            {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"}
+                          </span>
+                          <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: "var(--wine)" }}>
+                            <Heart size={10} fill="var(--wine)" />
+                            {(c.poems||[]).reduce((s,p) => s + (p.likes_count||0), 0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Page edge effect */}
+                    <div
+                      className="absolute right-0 top-0 bottom-0"
+                      style={{
+                        width: 6,
+                        background: "linear-gradient(to right, var(--rule) 0%, var(--paper) 100%)",
+                        opacity: 0.4,
+                      }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
@@ -1264,7 +1320,19 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
   );
 }
 
-const SEAL_COLORS = ["#8B3A4A", "#6E7F5C", "#7C8194"];
+const SEAL_COLORS = [
+  "#8B3A4A", "#6E7F5C", "#3A4A6E", "#7A5C3A", "#5C3A7A",
+  "#2E6B6B", "#8B5E3C", "#4A3A6E", "#6E3A5C", "#3A6E4A",
+  "#8B6B2E", "#2E4A6E", "#6B2E6B", "#3A5C3A", "#8B3A3A",
+  "#4A6B6B", "#6B4A2E", "#2E6B4A", "#6B2E3A", "#4A4A8B",
+];
+
+function colorFromString(str) {
+  if (!str) return SEAL_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  return SEAL_COLORS[Math.abs(hash) % SEAL_COLORS.length];
+}
 
 function AuthView({ onSuccess }) {
   const [mode, setMode] = useState("login"); // "login" | "signup"
@@ -3563,15 +3631,15 @@ export default function App() {
   const [authorId, setAuthorId] = useState(null);
   const [dmRecipient, setDmRecipient] = useState(null);
 
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("dark_mode") === "1");
-  useEffect(() => {
-    localStorage.setItem("dark_mode", darkMode ? "1" : "0");
-  }, [darkMode]);
+  const [darkMode] = useState(true);
 
-  const [weather, setWeather] = useState(null); // "snow" | "rain" | "sun" | null
+  const [weather, setWeather] = useState([]);
   useEffect(() => {
-    const options = ["snow", "rain", "sun", null];
-    setWeather(options[Math.floor(Math.random() * options.length)]);
+    const all = ["snow", "rain", "sun"];
+    // Pick 1-2 effects randomly, always include at least one
+    const shuffled = all.sort(() => Math.random() - 0.5);
+    const count = Math.random() < 0.35 ? 2 : 1; // 35% chance of two effects
+    setWeather(shuffled.slice(0, count));
   }, []);
 
   const [session, setSession] = useState(null);
@@ -3873,12 +3941,12 @@ export default function App() {
         .view-enter { animation: fadeIn 0.35s ease-out; }
       `}</style>
 
-      {weather === "snow" && <SideSnow darkMode={darkMode} />}
-      {weather === "rain" && <SideRain />}
-      {weather === "sun" && <SideSun />}
+      {weather.includes("snow") && <SideSnow darkMode={darkMode} />}
+      {weather.includes("rain") && <SideRain />}
+      {weather.includes("sun") && <SideSun />}
 
       <div className="relative" style={{ zIndex: 1 }}>
-        <TopNav view={view} setView={setView} session={session} profile={profile} darkMode={darkMode} setDarkMode={setDarkMode} goToWrite={() => { setEditingDraft(null); setView("write"); }} notifCount={notifCount} dmCount={dmCount} />
+        <TopNav view={view} setView={setView} session={session} profile={profile} goToWrite={() => { setEditingDraft(null); setView("write"); }} notifCount={notifCount} dmCount={dmCount} />
 
         {view === "home" && <HomeView collections={collections} topLiked={topLiked} freePoems={freePoems} openCollection={openCollection} openFreePoem={openFreePoem} goToAuthor={goToAuthor} currentChallenge={currentChallenge} onChallenge={() => { setActiveChallenge(currentChallenge); setView("challenge"); }} />}
         {view === "challenge" && activeChallenge && (
