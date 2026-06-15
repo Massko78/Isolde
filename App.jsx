@@ -13,6 +13,122 @@ function getVoterId(session) {
   return id;
 }
 
+
+function BookOpenAnimation({ spineColor, title, seal }) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "rgba(10,9,20,0.85)",
+      animation: "bookFadeOut 0.9s ease-in-out forwards",
+      pointerEvents: "none",
+    }}>
+      <style>{`
+        @keyframes bookFadeOut {
+          0%   { opacity: 1; }
+          60%  { opacity: 1; }
+          100% { opacity: 0; }
+        }
+        @keyframes leftPageOpen {
+          0%   { transform: perspective(800px) rotateY(0deg); }
+          70%  { transform: perspective(800px) rotateY(-85deg); }
+          100% { transform: perspective(800px) rotateY(-88deg); }
+        }
+        @keyframes rightPageOpen {
+          0%   { transform: perspective(800px) rotateY(0deg); }
+          70%  { transform: perspective(800px) rotateY(85deg); }
+          100% { transform: perspective(800px) rotateY(88deg); }
+        }
+        @keyframes spineGlow {
+          0%   { box-shadow: 0 0 0 rgba(201,168,124,0); }
+          40%  { box-shadow: 0 0 32px rgba(201,168,124,0.4); }
+          100% { box-shadow: 0 0 0 rgba(201,168,124,0); }
+        }
+      `}</style>
+
+      <div style={{ position: "relative", width: 280, height: 340 }}>
+        {/* Left page */}
+        <div style={{
+          position: "absolute", right: "50%", top: 0, width: 130, height: 340,
+          transformOrigin: "right center",
+          animation: "leftPageOpen 0.75s cubic-bezier(0.4,0,0.2,1) 0.1s forwards",
+          background: `linear-gradient(to right, #0F0E18, ${spineColor}22)`,
+          borderRadius: "4px 0 0 4px",
+          border: "1px solid rgba(201,168,124,0.15)",
+          borderRight: "none",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          overflow: "hidden",
+        }}>
+          {/* Decorative lines on left page */}
+          <svg width="100" height="200" viewBox="0 0 100 200" style={{ opacity: 0.15 }}>
+            {[30,55,80,105,130,155,175].map((y,i) => (
+              <line key={i} x1="10" y1={y} x2="90" y2={y} stroke="rgba(201,168,124,0.8)" strokeWidth="0.8"/>
+            ))}
+            <ellipse cx="50" cy="20" rx="20" ry="9" fill="none" stroke="rgba(201,168,124,0.6)" strokeWidth="0.8"/>
+          </svg>
+        </div>
+
+        {/* Spine */}
+        <div style={{
+          position: "absolute", left: "50%", transform: "translateX(-50%)",
+          width: 20, height: 340,
+          background: `linear-gradient(to bottom, ${spineColor}ee, ${spineColor}88)`,
+          animation: "spineGlow 0.85s ease-in-out 0.1s forwards",
+          zIndex: 2,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <span style={{
+            fontFamily: "'Fraunces', serif", fontStyle: "italic",
+            fontSize: 11, color: "rgba(255,255,255,0.7)",
+            writingMode: "vertical-rl", transform: "rotate(180deg)",
+            letterSpacing: "0.08em", maxHeight: 200, overflow: "hidden",
+          }}>{title}</span>
+        </div>
+
+        {/* Right page */}
+        <div style={{
+          position: "absolute", left: "50%", top: 0, width: 130, height: 340,
+          transformOrigin: "left center",
+          animation: "rightPageOpen 0.75s cubic-bezier(0.4,0,0.2,1) 0.1s forwards",
+          background: `linear-gradient(to left, #0F0E18, ${spineColor}22)`,
+          borderRadius: "0 4px 4px 0",
+          border: "1px solid rgba(201,168,124,0.15)",
+          borderLeft: "none",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8,
+          overflow: "hidden",
+        }}>
+          {/* Big sigil on right page */}
+          <span style={{
+            fontFamily: "'Fraunces', serif", fontStyle: "italic", fontWeight: 300,
+            fontSize: 72, color: spineColor, opacity: 0.3,
+            textShadow: `0 0 20px ${spineColor}`,
+            lineHeight: 1,
+          }}>{seal}</span>
+          <svg width="80" height="1" viewBox="0 0 80 1">
+            <line x1="0" y1="0" x2="80" y2="0" stroke="rgba(201,168,124,0.3)" strokeWidth="1"/>
+          </svg>
+        </div>
+
+        {/* Petal burst from spine */}
+        <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 3, pointerEvents: "none" }}>
+          {["#F4B8C8","#F0A0B8","#E8C0D0","rgba(201,168,124,0.8)"].map((color, i) => (
+            <div key={i} style={{
+              position: "absolute",
+              width: 8 + i * 2, height: 5 + i,
+              borderRadius: "50%",
+              background: color,
+              opacity: 0,
+              left: `${Math.cos((i * 90 + 45) * Math.PI / 180) * 30}px`,
+              top: `${Math.sin((i * 90 + 45) * Math.PI / 180) * 30}px`,
+              animation: `bookFadeOut 0.6s ease-out ${0.3 + i * 0.07}s forwards`,
+            }}/>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -656,6 +772,14 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
   const [commentError, setCommentError] = useState("");
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyDraft, setReplyDraft] = useState("");
+  const [bookOpening, setBookOpening] = useState(!collection.isFree);
+
+  useEffect(() => {
+    if (!collection.isFree) {
+      const t = setTimeout(() => setBookOpening(false), 900);
+      return () => clearTimeout(t);
+    }
+  }, [collection.id]);
 
   const canManage = session && (profile?.is_moderator || collection.author_id === session.user.id);
 
@@ -840,6 +964,16 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
       }
     }
   };
+
+  if (bookOpening && !collection.isFree) {
+    const sc = collection.sealColor || colorFromString(collection.title);
+    return (
+      <>
+        <BookOpenAnimation spineColor={sc} title={collection.title} seal={collection.seal} />
+        <div className="max-w-5xl mx-auto px-6 py-10" style={{ opacity: 0 }} />
+      </>
+    );
+  }
 
   if (fullscreen) {
     return (
@@ -2164,7 +2298,7 @@ function SideRain({ heavy }) {
     left: Math.random() * 110 - 5,
     length: heavy ? 18 + (i % 3) * 8 : 12 + (i % 3) * 6,
     width: heavy ? 1.5 : 1,
-    duration: heavy ? 0.5 + (i % 4) * 0.15 : 0.9 + (i % 4) * 0.25,
+    duration: heavy ? 0.8 + (i % 4) * 0.18 : 1.4 + (i % 4) * 0.3,
     delay: -(Math.random() * 2),
     opacity: heavy ? 0.28 + (i % 3) * 0.1 : 0.12 + (i % 3) * 0.05,
   }));
