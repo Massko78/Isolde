@@ -2293,14 +2293,14 @@ function SideSnow() {
 }
 
 function SideRain({ heavy }) {
-  const count = heavy ? 40 : 18;
+  const count = heavy ? 22 : 12;
   const drops = Array.from({ length: count }, (_, i) => ({
     left: Math.random() * 110 - 5,
-    length: heavy ? 18 + (i % 3) * 8 : 12 + (i % 3) * 6,
-    width: heavy ? 1.5 : 1,
-    duration: heavy ? 0.8 + (i % 4) * 0.18 : 1.4 + (i % 4) * 0.3,
-    delay: -(Math.random() * 2),
-    opacity: heavy ? 0.28 + (i % 3) * 0.1 : 0.12 + (i % 3) * 0.05,
+    length: heavy ? 10 + (i % 3) * 5 : 8 + (i % 3) * 4,
+    width: heavy ? 1 : 0.8,
+    duration: heavy ? 1.8 + (i % 4) * 0.4 : 2.5 + (i % 4) * 0.5,
+    delay: -(Math.random() * 3),
+    opacity: heavy ? 0.14 + (i % 3) * 0.06 : 0.07 + (i % 3) * 0.03,
   }));
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
