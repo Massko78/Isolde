@@ -122,15 +122,15 @@ function AuthorBadge({ avatarUrl, letter, color, size = 36 }) {
   return <WaxSeal letter={letter} color={color} size={size} />;
 }
 
-function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWrite }) {
+function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWrite, notifCount, dmCount }) {
   const items = [
     { key: "home", label: "Découvrir", icon: BookOpen },
     { key: "write", label: "Écrire", icon: PenLine },
   ];
   if (session) {
     items.push({ key: "following", label: "Abonnements", icon: Users });
-    items.push({ key: "interactions", label: "Interactions", icon: MessageCircle });
-    items.push({ key: "dm", label: "Messages", icon: Mail });
+    items.push({ key: "interactions", label: "Interactions", icon: MessageCircle, badge: notifCount });
+    items.push({ key: "dm", label: "Messages", icon: Mail, badge: dmCount });
     items.push({ key: "collab", label: "Collabs", icon: Crown });
   }
 
@@ -148,13 +148,13 @@ function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWr
           Dreams
         </button>
         <nav className="flex items-center gap-0.5 sm:gap-1">
-          {items.map(({ key, label, icon: Icon }) => {
+          {items.map(({ key, label, icon: Icon, badge }) => {
             const active = view === key;
             return (
               <button
                 key={key}
                 onClick={() => (key === "write" ? goToWrite() : setView(key))}
-                className="flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full text-sm font-ui transition-colors"
+                className="relative flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full text-sm font-ui transition-colors"
                 style={{
                   color: active ? "var(--paper-warm)" : "var(--ink)",
                   background: active ? "var(--ink)" : "transparent",
@@ -162,6 +162,14 @@ function TopNav({ view, setView, session, profile, darkMode, setDarkMode, goToWr
               >
                 <Icon size={15} strokeWidth={2} />
                 <span className="hidden sm:inline">{label}</span>
+                {badge > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center font-mono text-[10px] font-bold"
+                    style={{ background: "var(--wine)", color: "var(--paper-warm)", lineHeight: 1 }}
+                  >
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1096,7 +1104,11 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                       />
                       <div className="flex-1">
                         <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
-                          {c.anonymous ? "Anonyme" : c.author}
+                          {c.anonymous || !c.author_id ? (c.anonymous ? "Anonyme" : c.author) : (
+                            <button onClick={() => goToAuthor(c.author_id)} className="hover:underline transition-opacity">
+                              {c.author}
+                            </button>
+                          )}
                         </p>
                         <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
                           {c.content}
@@ -1140,11 +1152,24 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                               />
                               <div className="flex-1">
                                 <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
-                                  {r.anonymous ? "Anonyme" : r.author}
+                                  {r.anonymous || !r.author_id ? (r.anonymous ? "Anonyme" : r.author) : (
+                                    <button onClick={() => goToAuthor(r.author_id)} className="hover:underline transition-opacity">
+                                      {r.author}
+                                    </button>
+                                  )}
                                 </p>
                                 <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
                                   {r.content}
                                 </p>
+                                {session && (
+                                  <button
+                                    onClick={() => setReplyingTo(replyingTo === r.id ? null : r.id)}
+                                    className="font-ui text-xs mt-1 transition-opacity hover:opacity-70"
+                                    style={{ color: "var(--sage)" }}
+                                  >
+                                    Répondre
+                                  </button>
+                                )}
                               </div>
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 {!profile?.is_moderator && (
@@ -1163,15 +1188,17 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                       </div>
                     )}
 
-                    {/* Reply box */}
+                    {/* Reply box — shown under the specific reply or under the main comment */}
                     {replyingTo === c.id && (
                       <div className="flex items-center gap-2 pl-10">
                         <input
                           value={replyDraft}
                           onChange={(e) => setReplyDraft(e.target.value)}
-                          placeholder="Répondre..."
+                          onKeyDown={(e) => e.key === "Enter" && submitComment(replyDraft, c.id)}
+                          placeholder={`Répondre à ${c.anonymous ? "Anonyme" : c.author}…`}
                           className="flex-1 font-ui text-sm px-4 py-2 rounded-full border bg-transparent outline-none focus:ring-1"
                           style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+                          autoFocus
                         />
                         <button
                           onClick={() => submitComment(replyDraft, c.id)}
@@ -1698,7 +1725,7 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
   );
 }
 
-function ProfileView({ collections, draftPoems, openCollection, session, profile, setProfile, goToAuth, editDraft, onWrite }) {
+function ProfileView({ collections, draftPoems, freePoems, openCollection, openFreePoem, session, profile, setProfile, goToAuth, editDraft, onWrite }) {
   const [editing, setEditing] = useState(false);
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -1746,6 +1773,9 @@ function ProfileView({ collections, draftPoems, openCollection, session, profile
   }
 
   const mine = collections.filter((c) => c.author_id === session.user.id);
+  const myFreePoems = (draftPoems ? draftPoems : []).length >= 0
+    ? (freePoems || []).filter(p => p.author_id === session.user.id)
+    : [];
   const myDrafts = (draftPoems || []).filter(
     (d) => d.collection?.author_id === session.user.id || d.author_id === session.user.id
   );
@@ -1892,6 +1922,35 @@ function ProfileView({ collections, draftPoems, openCollection, session, profile
         </div>
       )}
 
+      {myFreePoems.length > 0 && (
+        <>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4 mt-10" style={{ color: "var(--sage)" }}>
+            Poèmes libres
+          </p>
+          <div className="flex flex-col gap-3">
+            {myFreePoems.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => openFreePoem(p)}
+                className="flex items-center justify-between p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
+                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-display italic text-base mb-0.5 truncate" style={{ color: "var(--ink)" }}>{p.title}</p>
+                  <p className="font-display italic text-xs" style={{ color: "var(--ink-light)" }}>
+                    « {(p.lines || []).find(l => l) || ""} »
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 ml-3 shrink-0" style={{ color: "var(--wine)" }}>
+                  <Heart size={13} fill={p.likes_count > 0 ? "var(--wine)" : "none"} />
+                  <span className="font-mono text-xs">{p.likes_count}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
       {myDrafts.length > 0 && (
         <>
           <p className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] mb-4 mt-10" style={{ color: "var(--sage)" }}>
@@ -2010,7 +2069,7 @@ function SideSun() {
   );
 }
 
-function AuthorView({ authorId, session, collections, openCollection, back, goToDM }) {
+function AuthorView({ authorId, session, collections, freePoems, openCollection, openFreePoem, back, goToDM }) {
   const [authorProfile, setAuthorProfile] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -2055,7 +2114,9 @@ function AuthorView({ authorId, session, collections, openCollection, back, goTo
   };
 
   const authorCollections = collections.filter((c) => c.author_id === authorId);
-  const totalLikes = authorCollections.reduce((sum, c) => sum + (c.poems || []).reduce((s, p) => s + (p.likes_count || 0), 0), 0);
+  const authorFreePoems = (freePoems || []).filter((p) => p.author_id === authorId);
+  const totalLikes = authorCollections.reduce((sum, c) => sum + (c.poems || []).reduce((s, p) => s + (p.likes_count || 0), 0), 0)
+    + authorFreePoems.reduce((s, p) => s + (p.likes_count || 0), 0);
   const isSelf = session?.user?.id === authorId;
 
   if (loading || !authorProfile) {
@@ -2131,7 +2192,7 @@ function AuthorView({ authorId, session, collections, openCollection, back, goTo
       </p>
       {authorCollections.length === 0 ? (
         <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-          Rien de publié pour le moment.
+          Aucun recueil pour le moment.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
@@ -2157,6 +2218,35 @@ function AuthorView({ authorId, session, collections, openCollection, back, goTo
             </button>
           ))}
         </div>
+      )}
+
+      {authorFreePoems.length > 0 && (
+        <>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] mt-8 mb-4" style={{ color: "var(--sage)" }}>
+            Poèmes libres
+          </p>
+          <div className="flex flex-col gap-3">
+            {authorFreePoems.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => openFreePoem(p)}
+                className="flex items-center justify-between p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
+                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-display italic text-lg mb-1" style={{ color: "var(--ink)" }}>{p.title}</p>
+                  <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                    « {(p.lines || []).find(l => l) || ""} »
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 ml-3 shrink-0" style={{ color: "var(--wine)" }}>
+                  <Heart size={13} fill={p.likes_count > 0 ? "var(--wine)" : "none"} />
+                  <span className="font-mono text-xs">{p.likes_count}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -2290,7 +2380,7 @@ function FollowingView({ session, collections, openCollection, goToAuthor }) {
   );
 }
 
-function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoem }) {
+function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoem, onLoad }) {
   const [likes, setLikes] = useState(null);
   const [comments, setComments] = useState(null);
   const [replies, setReplies] = useState(null);
@@ -2372,6 +2462,7 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
       } else {
         if (active) setReplies([]);
       }
+      if (active && onLoad) onLoad();
     };
     load();
     return () => { active = false; };
@@ -2475,7 +2566,13 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
                     <div className="flex-1 min-w-0">
                       <p className="font-ui text-xs mb-1" style={{ color: "var(--ink-light)" }}>
                         <span className="font-medium" style={{ color: "var(--ink)" }}>
-                          {c.anonymous ? "Anonyme" : c.author}
+                          {c.anonymous ? "Anonyme" : (
+                            c.author_id ? (
+                              <button onClick={(e) => { e.stopPropagation(); goToAuthor(c.author_id); }} className="hover:underline">
+                                {c.author}
+                              </button>
+                            ) : c.author
+                          )}
                         </span>
                         {" · "}
                         <span className="font-display italic">« {findPoemTitle(c.poem_id)} »</span>
@@ -2541,7 +2638,7 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
   );
 }
 
-function DMView({ session, profile, initialRecipient, onClearRecipient }) {
+function DMView({ session, profile, initialRecipient, onClearRecipient, onOpen }) {
   const [conversations, setConversations] = useState([]);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -2577,6 +2674,7 @@ function DMView({ session, profile, initialRecipient, onClearRecipient }) {
 
   useEffect(() => {
     const init = async () => {
+      if (onOpen) onOpen();
       const shaped = await loadConversations();
       if (initialRecipient && shaped) {
         const existing = shaped.find((c) => c.other.id === initialRecipient.id);
@@ -3458,6 +3556,8 @@ export default function App() {
   const [draftPoems, setDraftPoems] = useState([]);
   const [freePoems, setFreePoems] = useState([]);
   const [currentChallenge, setCurrentChallenge] = useState(null);
+  const [notifCount, setNotifCount] = useState(0);
+  const [dmCount, setDmCount] = useState(0);
   const [activeChallenge, setActiveChallenge] = useState(null);
   const [editingDraft, setEditingDraft] = useState(null);
   const [authorId, setAuthorId] = useState(null);
@@ -3584,9 +3684,70 @@ export default function App() {
     setCurrentChallenge(ch || null);
   };
 
+  const loadNotifCounts = async (sess, cols, freePs) => {
+    if (!sess?.user?.id) { setNotifCount(0); setDmCount(0); return; }
+    const uid = sess.user.id;
+
+    // Poems I authored
+    const myPoemIds = [
+      ...(cols || []).filter(c => c.author_id === uid).flatMap(c => (c.poems || []).map(p => p.id)),
+      ...(freePs || []).filter(p => p.author_id === uid).map(p => p.id),
+    ];
+
+    let interactionCount = 0;
+    if (myPoemIds.length > 0) {
+      // New likes on my poems (not by me)
+      const { count: likeCount } = await supabase.from("likes")
+        .select("id", { count: "exact", head: true })
+        .in("poem_id", myPoemIds)
+        .neq("voter_id", uid);
+      interactionCount += likeCount || 0;
+
+      // New comments on my poems (not by me)
+      const { count: commentCount } = await supabase.from("comments")
+        .select("id", { count: "exact", head: true })
+        .in("poem_id", myPoemIds)
+        .neq("author_id", uid)
+        .is("parent_id", null);
+      interactionCount += commentCount || 0;
+    }
+
+    // Replies to my comments
+    const { data: myComments } = await supabase.from("comments").select("id").eq("author_id", uid);
+    const myCommentIds = (myComments || []).map(c => c.id);
+    if (myCommentIds.length > 0) {
+      const { count: replyCount } = await supabase.from("comments")
+        .select("id", { count: "exact", head: true })
+        .in("parent_id", myCommentIds)
+        .neq("author_id", uid);
+      interactionCount += replyCount || 0;
+    }
+    setNotifCount(interactionCount);
+
+    // Unread DMs: messages in my conversations not sent by me, after last visit
+    const lastDmVisit = localStorage.getItem("last_dm_visit") || "1970-01-01";
+    const { data: convs } = await supabase.from("conversations")
+      .select("id")
+      .or(`participant_a.eq.${uid},participant_b.eq.${uid}`);
+    if (convs && convs.length > 0) {
+      const convIds = convs.map(c => c.id);
+      const { count: unread } = await supabase.from("messages")
+        .select("id", { count: "exact", head: true })
+        .in("conversation_id", convIds)
+        .neq("sender_id", uid)
+        .gt("created_at", lastDmVisit);
+      setDmCount(unread || 0);
+    }
+  };
+
   useEffect(() => {
     loadCollections();
   }, []);
+
+  useEffect(() => {
+    if (session) loadNotifCounts(session, collections, freePoems);
+    else { setNotifCount(0); setDmCount(0); }
+  }, [session, collections.length, freePoems.length]);
 
   const deepLinkHandled = useRef(false);
 
@@ -3717,7 +3878,7 @@ export default function App() {
       {weather === "sun" && <SideSun />}
 
       <div className="relative" style={{ zIndex: 1 }}>
-        <TopNav view={view} setView={setView} session={session} profile={profile} darkMode={darkMode} setDarkMode={setDarkMode} goToWrite={() => { setEditingDraft(null); setView("write"); }} />
+        <TopNav view={view} setView={setView} session={session} profile={profile} darkMode={darkMode} setDarkMode={setDarkMode} goToWrite={() => { setEditingDraft(null); setView("write"); }} notifCount={notifCount} dmCount={dmCount} />
 
         {view === "home" && <HomeView collections={collections} topLiked={topLiked} freePoems={freePoems} openCollection={openCollection} openFreePoem={openFreePoem} goToAuthor={goToAuthor} currentChallenge={currentChallenge} onChallenge={() => { setActiveChallenge(currentChallenge); setView("challenge"); }} />}
         {view === "challenge" && activeChallenge && (
@@ -3779,7 +3940,9 @@ export default function App() {
           <ProfileView
             collections={collections}
             draftPoems={draftPoems}
+            freePoems={freePoems}
             openCollection={openCollection}
+            openFreePoem={openFreePoem}
             session={session}
             profile={profile}
             setProfile={setProfile}
@@ -3804,7 +3967,9 @@ export default function App() {
             authorId={authorId}
             session={session}
             collections={collections}
+            freePoems={freePoems}
             openCollection={openCollection}
+            openFreePoem={openFreePoem}
             back={() => setView("home")}
             goToDM={goToDM}
           />
@@ -3824,6 +3989,7 @@ export default function App() {
             freePoems={freePoems}
             goToAuthor={goToAuthor}
             goToPoem={goToPoem}
+            onLoad={() => setNotifCount(0)}
           />
         )}
         {view === "dm" && session && (
@@ -3832,6 +3998,10 @@ export default function App() {
             profile={profile}
             initialRecipient={dmRecipient}
             onClearRecipient={() => setDmRecipient(null)}
+            onOpen={() => {
+              localStorage.setItem("last_dm_visit", new Date().toISOString());
+              setDmCount(0);
+            }}
           />
         )}
       </div>
