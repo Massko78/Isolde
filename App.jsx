@@ -1903,266 +1903,395 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
     await supabase.auth.signOut();
   };
 
+  const spineColor = (c) => c.sealColor || colorFromString(c.title);
+
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
-      <div className="flex items-start justify-between mb-10">
-        <div className="flex items-center gap-4">
-          {profile.avatar_url ? (
-            <img src={profile.avatar_url} alt={profile.username} className="w-14 h-14 rounded-full object-cover" />
-          ) : (
-            <WaxSeal letter={profile.username.charAt(0).toUpperCase()} color="var(--wine)" size={56} />
-          )}
-          <div>
-            <h1 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
-              {profile.username}
-            </h1>
-            <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-              {mine.length} recueil{mine.length === 1 ? "" : "s"} publié{mine.length === 1 ? "" : "s"}
-            </p>
+    <div className="max-w-4xl mx-auto px-6 pb-16 view-enter">
+
+      {/* ── HERO BANNER ── */}
+      <div className="relative rounded-2xl overflow-hidden mb-8 mt-8" style={{
+        background: `linear-gradient(135deg, ${colorFromString(profile.username)}22 0%, var(--paper-warm) 100%)`,
+        border: "1px solid var(--rule)",
+        minHeight: 180,
+      }}>
+        {/* Subtle petal decoration top-right */}
+        <svg className="absolute top-0 right-0 opacity-10 pointer-events-none" width="200" height="160" viewBox="0 0 200 160" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="160" cy="30" rx="50" ry="22" fill={colorFromString(profile.username)} transform="rotate(-20 160 30)"/>
+          <ellipse cx="180" cy="80" rx="35" ry="15" fill={colorFromString(profile.username)} transform="rotate(15 180 80)"/>
+          <ellipse cx="130" cy="10" rx="28" ry="12" fill={colorFromString(profile.username)} transform="rotate(-35 130 10)"/>
+        </svg>
+
+        <div className="relative p-8 flex items-start gap-7 flex-wrap">
+          {/* Big avatar */}
+          <div className="shrink-0">
+            {profile.avatar_url ? (
+              <img src={profile.avatar_url} alt={profile.username} className="rounded-full object-cover" style={{ width: 96, height: 96, border: `3px solid ${colorFromString(profile.username)}60` }} />
+            ) : (
+              <WaxSeal letter={profile.username.charAt(0).toUpperCase()} color={colorFromString(profile.username)} size={96} />
+            )}
+          </div>
+
+          <div className="flex-1 min-w-[180px]">
+            <div className="flex items-center gap-3 flex-wrap mb-1">
+              <h1 className="font-display italic" style={{ fontSize: "clamp(1.6rem,4vw,2.4rem)", color: "var(--ink)", lineHeight: 1.1 }}>
+                {profile.username}
+              </h1>
+              {profile.is_moderator && (
+                <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
+                  <ShieldCheck size={10} /> Modo
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 mb-3 flex-wrap">
+              <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+                {mine.length} recueil{mine.length === 1 ? "" : "s"}
+              </span>
+              <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+                {myFreePoems.length} poème{myFreePoems.length === 1 ? "" : "s"} libre{myFreePoems.length === 1 ? "" : "s"}
+              </span>
+              <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+                {mine.reduce((s, c) => s + (c.poems||[]).reduce((ss, p) => ss + (p.likes_count||0), 0), 0) + myFreePoems.reduce((s, p) => s + (p.likes_count||0), 0)} like{mine.reduce((s,c)=>s+(c.poems||[]).reduce((ss,p)=>ss+(p.likes_count||0),0),0)+myFreePoems.reduce((s,p)=>s+(p.likes_count||0),0)===1?"":"s"} au total
+              </span>
+            </div>
+
+            {!editing && (
+              profile.bio ? (
+                <p className="font-display italic text-base leading-relaxed" style={{ color: "var(--ink)", opacity: 0.85, maxWidth: 480 }}>
+                  « {profile.bio} »
+                </p>
+              ) : (
+                <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+                  Aucune bio — ajoute quelques mots sur toi.
+                </p>
+              )
+            )}
+          </div>
+
+          {/* Actions top-right */}
+          <div className="flex items-center gap-3 shrink-0 self-start">
+            {!editing && (
+              <button onClick={() => setEditing(true)} className="font-ui text-xs px-4 py-2 rounded-full border transition-opacity hover:opacity-70" style={{ borderColor: "var(--rule)", color: "var(--ink)" }}>
+                Modifier le profil
+              </button>
+            )}
+            <button onClick={handleLogout} className="flex items-center gap-1.5 font-ui text-xs" style={{ color: "var(--ink-light)" }}>
+              <LogOut size={13} /> Déconnexion
+            </button>
           </div>
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-2 font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-          <LogOut size={14} />
-          Se déconnecter
-        </button>
       </div>
 
-      {editing ? (
-        <div className="flex flex-col gap-4 mb-10 p-5 rounded-lg border" style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}>
-          <label className="flex flex-col gap-2">
-            <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
-              Pseudo
-            </span>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1"
-              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-            />
-          </label>
-          <ImageField label="Photo de profil (optionnel)" value={avatarUrl} onChange={setAvatarUrl} session={session} maxHeightPreview={160} />
-          <label className="flex flex-col gap-2">
-            <span className="font-ui text-xs uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>
-              Bio
-            </span>
-            <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              rows={3}
-              placeholder="Quelques mots sur toi..."
-              className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none focus:ring-1 resize-none"
-              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-            />
-          </label>
-          {errorMsg && (
-            <p className="font-ui text-sm" style={{ color: "var(--wine)" }}>
-              {errorMsg}
-            </p>
-          )}
+      {/* ── EDIT FORM ── */}
+      {editing && (
+        <div className="flex flex-col gap-4 mb-10 p-6 rounded-xl border" style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <label className="flex flex-col gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>Pseudo</span>
+              <input value={username} onChange={(e) => setUsername(e.target.value)} className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>Bio</span>
+              <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={2} placeholder="Quelques mots sur toi..." className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none resize-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+            </label>
+          </div>
+          <ImageField label="Photo de profil" value={avatarUrl} onChange={setAvatarUrl} session={session} maxHeightPreview={120} />
+          {errorMsg && <p className="font-ui text-sm" style={{ color: "var(--wine)" }}>{errorMsg}</p>}
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={!username.trim() || saving}
-              className="font-ui text-sm px-5 py-2.5 rounded-full disabled:opacity-30"
-              style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
-            >
+            <button onClick={handleSave} disabled={!username.trim() || saving} className="font-ui text-sm px-5 py-2.5 rounded-full disabled:opacity-30" style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
               {saving ? "..." : "Enregistrer"}
             </button>
-            <button onClick={() => setEditing(false)} className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-              Annuler
-            </button>
+            <button onClick={() => setEditing(false)} className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Annuler</button>
           </div>
         </div>
-      ) : (
-        <div className="mb-10">
-          {profile.bio && (
-            <p className="font-ui text-sm leading-relaxed mb-3" style={{ color: "var(--ink)" }}>
-              {profile.bio}
-            </p>
-          )}
-          <button onClick={() => setEditing(true)} className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-            Modifier le profil
-          </button>
-        </div>
       )}
 
-      <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4" style={{ color: "var(--sage)" }}>
-        Mes recueils
-      </p>
-      {mine.length === 0 ? (
-        <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-          Tu n'as encore rien publié. Va dans "Écrire" pour partager ton premier poème.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {mine.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => openCollection(c, 0)}
-              className="flex items-center justify-between p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
-              style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-            >
-              <div className="flex items-center gap-4">
-                <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
-                <div>
-                  <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
-                    {c.title}
-                  </p>
-                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                    {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"} · {c.theme}
-                  </p>
-                </div>
-              </div>
-              <ArrowRight size={16} style={{ color: "var(--ink-light)" }} />
-            </button>
-          ))}
-        </div>
-      )}
-
-      {myFreePoems.length > 0 && (
-        <>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4 mt-10" style={{ color: "var(--sage)" }}>
-            Poèmes libres
+      {/* ── MES RECUEILS — book cards ── */}
+      {mine.length > 0 && (
+        <section className="mb-12">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5 flex items-center gap-2" style={{ color: "var(--sage)" }}>
+            <BookOpen size={12} /> Mes recueils
           </p>
-          <div className="flex flex-col gap-3">
-            {myFreePoems.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => openFreePoem(p)}
-                className="flex items-center justify-between p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
-                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-display italic text-base mb-0.5 truncate" style={{ color: "var(--ink)" }}>{p.title}</p>
-                  <p className="font-display italic text-xs" style={{ color: "var(--ink-light)" }}>
-                    « {(p.lines || []).find(l => l) || ""} »
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 ml-3 shrink-0" style={{ color: "var(--wine)" }}>
-                  <Heart size={13} fill={p.likes_count > 0 ? "var(--wine)" : "none"} />
-                  <span className="font-mono text-xs">{p.likes_count}</span>
-                </div>
-              </button>
-            ))}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {mine.map((c) => {
+              const sc = spineColor(c);
+              const totalLikes = (c.poems||[]).reduce((s,p) => s+(p.likes_count||0), 0);
+              return (
+                <button key={c.id} onClick={() => openCollection(c, 0)} className="text-left group relative">
+                  <div className="relative overflow-hidden transition-all duration-300" style={{
+                    borderRadius: "3px 8px 8px 3px",
+                    boxShadow: `-3px 0 8px rgba(0,0,0,0.6), 4px 4px 24px rgba(0,0,0,0.5)`,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform="translateY(-5px)"; e.currentTarget.style.boxShadow=`-3px 0 12px rgba(0,0,0,0.8),8px 10px 36px rgba(0,0,0,0.65)`; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow=`-3px 0 8px rgba(0,0,0,0.6),4px 4px 24px rgba(0,0,0,0.5)`; }}
+                  >
+                    <div className="absolute left-0 top-0 bottom-0 z-10" style={{ width: 10, background: `linear-gradient(to bottom, ${sc}dd, ${sc}88)` }}>
+                      <div className="absolute left-[3px] top-3 bottom-3 w-px" style={{ background: "rgba(255,255,255,0.2)" }} />
+                    </div>
+                    <div className="relative pl-[10px]" style={{ height: 200 }}>
+                      {c.cover_url ? (
+                        <img src={c.cover_url} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ left: 10 }} />
+                      ) : (
+                        <div className="absolute inset-0" style={{ left: 10, background: `linear-gradient(160deg, #0F0E18 0%, ${sc}22 60%, #0F0E18 100%)` }} />
+                      )}
+                      <div className="absolute inset-0 z-[1]" style={{ left: 10, background: c.cover_url ? `linear-gradient(160deg,rgba(8,6,20,0.85) 0%,${sc}55 50%,rgba(5,4,15,0.92) 100%)` : `linear-gradient(160deg,rgba(8,6,20,0.6) 0%,transparent 60%,rgba(5,4,15,0.7) 100%)` }} />
+                      <svg className="absolute inset-0 w-full h-full z-[2] pointer-events-none" style={{ left: 10 }} viewBox="0 0 150 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+                        <ellipse cx="25" cy="30" rx="14" ry="6" fill={sc} opacity="0.45" transform="rotate(-30 25 30)"/>
+                        <ellipse cx="128" cy="22" rx="11" ry="4.5" fill={sc} opacity="0.3" transform="rotate(20 128 22)"/>
+                        <circle cx="118" cy="75" r="1.8" fill="#C9A87C" opacity="0.4"/>
+                      </svg>
+                      <div className="absolute z-[3]" style={{ top: 10, left: 20, right: 10 }}>
+                        <div style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(201,168,124,0.5), transparent)" }} />
+                      </div>
+                      <div className="absolute inset-0 z-[3] flex items-center justify-center" style={{ left: 10 }}>
+                        <span style={{ fontFamily: "'Fraunces',serif", fontStyle: "italic", fontSize: 64, fontWeight: 300, lineHeight: 1, color: sc, opacity: c.cover_url ? 0.3 : 0.55, textShadow: `0 0 24px ${sc}` }}>
+                          {c.seal}
+                        </span>
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 z-[4]" style={{ paddingLeft: 10 }}>
+                        <div className="relative px-3 pb-3 pt-2">
+                          <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent, rgba(5,4,16,0.95))" }} />
+                          <div className="relative">
+                            <p style={{ fontFamily: "'Fraunces',serif", fontStyle: "italic", fontSize: 13, color: "#F0E8D8", marginBottom: 2, lineHeight: 1.3 }}>{c.title}</p>
+                            <p style={{ fontSize: 10, color: "rgba(201,168,124,0.7)", letterSpacing: "0.04em" }}>{c.theme} · {(c.poems||[]).length} poème{(c.poems||[]).length===1?"":"s"}{totalLikes > 0 ? ` · ❤ ${totalLikes}` : ""}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="absolute right-0 top-0 bottom-0 z-[5]" style={{ width: 5, background: "repeating-linear-gradient(to bottom,#1E1A2B,#1E1A2B 2px,rgba(201,168,124,0.06) 2px,rgba(201,168,124,0.06) 3px)", borderRadius: "0 8px 8px 0" }} />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        </>
+        </section>
       )}
 
+      {/* ── POÈMES LIBRES ── */}
+      {myFreePoems.length > 0 && (
+        <section className="mb-12">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5 flex items-center gap-2" style={{ color: "var(--sage)" }}>
+            <PenLine size={12} /> Poèmes libres
+          </p>
+          <div className="flex flex-col gap-4">
+            {myFreePoems.map((p) => {
+              const preview = (p.lines || []).filter(l => l.trim()).slice(0, 3);
+              return (
+                <button key={p.id} onClick={() => openFreePoem(p)}
+                  className="text-left p-5 rounded-xl border transition-all hover:shadow-md"
+                  style={{ background: "var(--paper-warm)", borderColor: "var(--rule)", borderLeft: `3px solid ${colorFromString(p.title)}` }}>
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <p className="font-display italic text-xl" style={{ color: "var(--ink)" }}>{p.title}</p>
+                    <div className="flex items-center gap-1 shrink-0" style={{ color: "var(--wine)" }}>
+                      <Heart size={13} fill={p.likes_count > 0 ? "var(--wine)" : "none"} />
+                      <span className="font-mono text-xs">{p.likes_count}</span>
+                    </div>
+                  </div>
+                  <div className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                    {preview.map((line, i) => <p key={i}>{line}</p>)}
+                    {(p.lines||[]).filter(l=>l.trim()).length > 3 && (
+                      <p className="font-ui not-italic text-xs mt-1" style={{ color: "var(--ink-light)", opacity: 0.5 }}>…</p>
+                    )}
+                  </div>
+                  <p className="font-mono text-[10px] mt-3" style={{ color: "var(--ink-light)", opacity: 0.5 }}>
+                    {timeAgo(p.updated_at || p.created_at)}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── BROUILLONS ── */}
       {myDrafts.length > 0 && (
-        <>
-          <p className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] mb-4 mt-10" style={{ color: "var(--sage)" }}>
-            <FileEdit size={13} />
-            Brouillons
+        <section>
+          <p className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] mb-4" style={{ color: "var(--sage)" }}>
+            <FileEdit size={12} /> Brouillons
           </p>
           <div className="flex flex-col gap-3">
             {myDrafts.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => editDraft(d)}
-                className="flex items-center justify-between p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
-                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-              >
+              <button key={d.id} onClick={() => editDraft(d)}
+                className="flex items-center justify-between p-4 rounded-lg border text-left hover:shadow-sm transition-all"
+                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}>
                 <div>
-                  <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
-                    {d.title || "Sans titre"}
-                  </p>
-                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                    {d.collection?.title || "Poème libre"}
-                  </p>
+                  <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>{d.title || "Sans titre"}</p>
+                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>{d.collection?.title || "Poème libre"}</p>
                 </div>
                 <span className="font-ui text-xs px-3 py-1.5 rounded-full border" style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}>
-                  Continuer
+                  Continuer →
                 </span>
               </button>
             ))}
           </div>
-        </>
+        </section>
+      )}
+
+      {mine.length === 0 && myFreePoems.length === 0 && myDrafts.length === 0 && (
+        <div className="text-center py-16">
+          <p className="font-display italic text-2xl mb-4" style={{ color: "var(--ink-light)" }}>
+            Rien encore publié.
+          </p>
+          <button onClick={onWrite} className="font-ui text-sm px-6 py-3 rounded-full" style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
+            Écrire quelque chose
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
-function SideSnow({ darkMode }) {
-  const count = darkMode ? 28 : 12;
-  const flakes = Array.from({ length: count }, (_, i) => ({
-    left: darkMode
-      ? Math.random() * 100  // full width in dark mode
-      : i % 2 === 0 ? 1 + ((i * 3) % 9) : 91 + ((i * 3) % 9), // edges only in light
-    size: darkMode ? 1.5 + (i % 4) : 2 + (i % 3),
-    duration: darkMode ? 20 + (i % 8) * 5 : 32 + (i % 6) * 6,
-    delay: -(i * (darkMode ? 2.2 : 4.5)),
-    opacity: darkMode ? 0.35 + (i % 4) * 0.1 : 0.18 + (i % 3) * 0.08,
+function SideSnow() {
+  const flakes = Array.from({ length: 28 }, (_, i) => ({
+    left: Math.random() * 100,
+    size: 1.5 + (i % 4),
+    duration: 18 + (i % 8) * 5,
+    delay: -(i * 2.1),
+    opacity: 0.3 + (i % 4) * 0.1,
   }));
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
       {flakes.map((f, i) => (
-        <div
-          key={i}
-          className="absolute rounded-full"
-          style={{
-            left: `${f.left}%`,
-            top: "-4%",
-            width: f.size,
-            height: f.size,
-            background: "#FFFFFF",
-            opacity: f.opacity,
-            animation: `snowfall ${f.duration}s linear infinite`,
-            animationDelay: `${f.delay}s`,
-          }}
-        />
+        <div key={i} className="absolute rounded-full" style={{ left: `${f.left}%`, top: "-4%", width: f.size, height: f.size, background: "#FFFFFF", opacity: f.opacity, animation: `snowfall ${f.duration}s linear infinite`, animationDelay: `${f.delay}s` }} />
       ))}
     </div>
   );
 }
 
-function SideRain() {
-  const drops = Array.from({ length: 14 }, (_, i) => ({
-    side: i % 2 === 0 ? "left" : "right",
-    offset: 1 + ((i * 3) % 9),
-    length: 12 + (i % 3) * 6,
-    duration: 0.9 + (i % 4) * 0.25,
-    delay: -(i * 0.4),
-    opacity: 0.12 + (i % 3) * 0.06,
+function SideRain({ heavy }) {
+  const count = heavy ? 40 : 18;
+  const drops = Array.from({ length: count }, (_, i) => ({
+    left: Math.random() * 110 - 5,
+    length: heavy ? 18 + (i % 3) * 8 : 12 + (i % 3) * 6,
+    width: heavy ? 1.5 : 1,
+    duration: heavy ? 0.5 + (i % 4) * 0.15 : 0.9 + (i % 4) * 0.25,
+    delay: -(Math.random() * 2),
+    opacity: heavy ? 0.28 + (i % 3) * 0.1 : 0.12 + (i % 3) * 0.05,
   }));
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
       {drops.map((d, i) => (
-        <div
-          key={i}
-          className="absolute"
-          style={{
-            [d.side]: `${d.offset}%`,
-            top: "-8%",
-            width: 1.5,
-            height: d.length,
-            borderRadius: 2,
-            background: "var(--ink-light)",
-            opacity: d.opacity,
-            transform: "rotate(10deg)",
-            animation: `rainfall ${d.duration}s linear infinite`,
-            animationDelay: `${d.delay}s`,
-          }}
-        />
+        <div key={i} className="absolute" style={{
+          left: `${d.left}%`, top: "-8%",
+          width: d.width, height: d.length, borderRadius: 2,
+          background: heavy ? "rgba(160,180,220,0.7)" : "rgba(180,195,220,0.6)",
+          opacity: d.opacity,
+          transform: "rotate(12deg)",
+          animation: `rainfall ${d.duration}s linear infinite`,
+          animationDelay: `${d.delay}s`,
+        }} />
       ))}
     </div>
   );
 }
 
-function SideSun() {
+function SideLeaves() {
+  const LEAF_COLORS = ["#C4623A","#D4892A","#8B3A1A","#A65C20","#D4A030","#7A3A10"];
+  const leaves = Array.from({ length: 18 }, (_, i) => ({
+    left: Math.random() * 105,
+    color: LEAF_COLORS[i % LEAF_COLORS.length],
+    size: 8 + (i % 4) * 4,
+    duration: 12 + (i % 6) * 4,
+    delay: -(Math.random() * 15),
+    drift: (Math.random() - 0.5) * 60,
+    rotation: Math.random() * 360,
+  }));
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
-      <div
-        className="absolute rounded-full"
-        style={{
-          top: "-12%",
-          right: "-8%",
-          width: 360,
-          height: 360,
-          background: "radial-gradient(circle, rgba(255,214,140,0.28), transparent 70%)",
-          filter: "blur(10px)",
-        }}
-      />
+      {leaves.map((l, i) => (
+        <svg key={i} className="absolute" style={{
+          left: `${l.left}%`, top: "-4%",
+          width: l.size, height: l.size * 1.3, opacity: 0.75,
+          animation: `leaffall ${l.duration}s ease-in infinite`,
+          animationDelay: `${l.delay}s`,
+          "--drift": `${l.drift}px`, "--rot": `${l.rotation}deg`,
+        }} viewBox="0 0 20 26" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 0 C16 4 20 10 18 18 C14 24 6 24 2 18 C0 10 4 4 10 0Z" fill={l.color} opacity="0.88"/>
+          <line x1="10" y1="2" x2="10" y2="22" stroke="rgba(0,0,0,0.18)" strokeWidth="0.8"/>
+        </svg>
+      ))}
     </div>
+  );
+}
+
+function SideSakura() {
+  const SAKURA = ["#F4B8C8","#F0A0B8","#E8C0D0","#F8D0DC","#EBA8BC","#F5C0CC"];
+  const petals = Array.from({ length: 22 }, (_, i) => ({
+    left: Math.random() * 110 - 5,
+    color: SAKURA[i % SAKURA.length],
+    w: 10 + (i % 3) * 4, h: 7 + (i % 3) * 3,
+    duration: 14 + (i % 7) * 3,
+    delay: -(Math.random() * 18),
+    drift: (Math.random() - 0.5) * 80,
+    rotation: Math.random() * 360,
+  }));
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
+      {petals.map((p, i) => (
+        <svg key={i} className="absolute" style={{
+          left: `${p.left}%`, top: "-3%", width: p.w, height: p.h,
+          animation: `sakurafall ${p.duration}s ease-in-out infinite`,
+          animationDelay: `${p.delay}s`,
+          "--drift": `${p.drift}px`, "--rot": `${p.rotation}deg`,
+        }} viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="15" cy="10" rx="14" ry="8" fill={p.color} opacity="0.82"/>
+          <ellipse cx="15" cy="10" rx="8" ry="5" fill="rgba(255,255,255,0.22)"/>
+        </svg>
+      ))}
+      <div className="absolute rounded-full" style={{ top: "-10%", right: "-5%", width: 280, height: 280, background: "radial-gradient(circle, rgba(244,184,200,0.1), transparent 70%)", filter: "blur(20px)" }} />
+    </div>
+  );
+}
+
+function SideWind() {
+  const streaks = Array.from({ length: 10 }, (_, i) => ({
+    top: 8 + i * 9,
+    width: 60 + (i % 5) * 30,
+    duration: 3 + (i % 4),
+    delay: -(i * 0.8),
+    opacity: 0.05 + (i % 3) * 0.02,
+  }));
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
+      {streaks.map((s, i) => (
+        <div key={i} style={{
+          position: "absolute", top: `${s.top}%`,
+          left: i % 2 === 0 ? "-10%" : "auto", right: i % 2 !== 0 ? "-10%" : "auto",
+          width: s.width, height: 1,
+          background: "linear-gradient(to right, transparent, rgba(200,210,240,0.35), transparent)",
+          borderRadius: 1, opacity: s.opacity,
+          animation: `${i % 2 === 0 ? "windstreakR" : "windstreakL"} ${s.duration}s ease-in-out infinite`,
+          animationDelay: `${s.delay}s`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+function SideStorm() {
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    const schedule = () => {
+      const t = setTimeout(() => {
+        setFlash(true);
+        setTimeout(() => { setFlash(false); setTimeout(() => { setFlash(true); setTimeout(() => setFlash(false), 55); }, 100); }, 70);
+        schedule();
+      }, 3500 + Math.random() * 7000);
+      return t;
+    };
+    const t = schedule();
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <>
+      <SideRain heavy />
+      {flash && <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1, background: "rgba(180,200,255,0.07)" }} aria-hidden="true" />}
+      {flash && (
+        <svg className="fixed pointer-events-none" style={{ top: 0, right: "12%", zIndex: 1, width: 55, height: 130, opacity: 0.38 }} viewBox="0 0 55 130" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <polyline points="36,0 16,60 30,60 10,130" fill="none" stroke="rgba(200,220,255,0.95)" strokeWidth="2" strokeLinejoin="round"/>
+        </svg>
+      )}
+    </>
   );
 }
 
@@ -2227,62 +2356,52 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
-      <button
-        onClick={back}
-        className="flex items-center gap-2 font-ui text-sm mb-8 transition-opacity hover:opacity-70"
-        style={{ color: "var(--ink-light)" }}
-      >
+    <div className="max-w-3xl mx-auto px-6 py-8 view-enter">
+      <button onClick={back} className="flex items-center gap-2 font-ui text-sm mb-6 transition-opacity hover:opacity-70" style={{ color: "var(--ink-light)" }}>
         <ArrowLeft size={15} /> Retour
       </button>
 
-      <div className="flex items-start justify-between mb-10 gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
+      <div className="relative rounded-2xl overflow-hidden mb-8 p-7" style={{
+        background: `linear-gradient(135deg, ${colorFromString(authorProfile.username)}1A 0%, var(--paper-warm) 100%)`,
+        border: "1px solid var(--rule)",
+      }}>
+        <div className="flex items-start gap-6 flex-wrap relative">
           {authorProfile.avatar_url ? (
-            <img src={authorProfile.avatar_url} alt={authorProfile.username} className="w-14 h-14 rounded-full object-cover" />
+            <img src={authorProfile.avatar_url} alt={authorProfile.username} className="rounded-full object-cover shrink-0" style={{ width: 88, height: 88, border: `3px solid ${colorFromString(authorProfile.username)}55` }} />
           ) : (
-            <WaxSeal letter={authorProfile.username.charAt(0).toUpperCase()} color="var(--wine)" size={56} />
+            <WaxSeal letter={authorProfile.username.charAt(0).toUpperCase()} color={colorFromString(authorProfile.username)} size={88} />
           )}
-          <div>
-            <h1 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+          <div className="flex-1 min-w-[160px]">
+            <h1 className="font-display italic mb-1" style={{ fontSize: "clamp(1.5rem,3.5vw,2.2rem)", color: "var(--ink)", lineHeight: 1.1 }}>
               {authorProfile.username}
             </h1>
-            <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-              {authorCollections.length} recueil{authorCollections.length === 1 ? "" : "s"} · {totalLikes} like{totalLikes === 1 ? "" : "s"} au total
-            </p>
+            <div className="flex items-center gap-4 mb-3 flex-wrap">
+              <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>{authorCollections.length} recueil{authorCollections.length===1?"":"s"}</span>
+              <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>{authorFreePoems.length} poème{authorFreePoems.length===1?"":"s"} libre{authorFreePoems.length===1?"":"s"}</span>
+              <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>{totalLikes} like{totalLikes===1?"":"s"}</span>
+            </div>
+            {authorProfile.bio && (
+              <p className="font-display italic text-base leading-relaxed" style={{ color: "var(--ink)", opacity: 0.8, maxWidth: 420 }}>
+                « {authorProfile.bio} »
+              </p>
+            )}
           </div>
+          {session && !isSelf && (
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <button onClick={toggleFollow} className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors"
+                style={isFollowing ? { border: "1px solid var(--rule)", color: "var(--ink-light)" } : { background: "var(--ink)", color: "var(--paper-warm)" }}>
+                {isFollowing ? <UserMinus size={15} /> : <UserPlus size={15} />}
+                {isFollowing ? "Ne plus suivre" : "Suivre"}
+              </button>
+              <button onClick={() => goToDM({ id: authorId, username: authorProfile.username, avatar_url: authorProfile.avatar_url })}
+                className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors border"
+                style={{ borderColor: "var(--rule)", color: "var(--ink)" }}>
+                <Mail size={15} /> Message
+              </button>
+            </div>
+          )}
         </div>
-        {session && !isSelf && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={toggleFollow}
-              className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors"
-              style={
-                isFollowing
-                  ? { border: "1px solid var(--rule)", color: "var(--ink-light)" }
-                  : { background: "var(--ink)", color: "var(--paper-warm)" }
-              }
-            >
-              {isFollowing ? <UserMinus size={15} /> : <UserPlus size={15} />}
-              {isFollowing ? "Ne plus suivre" : "Suivre"}
-            </button>
-            <button
-              onClick={() => goToDM({ id: authorId, username: authorProfile.username, avatar_url: authorProfile.avatar_url })}
-              className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors border"
-              style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-            >
-              <Mail size={15} />
-              Message
-            </button>
-          </div>
-        )}
       </div>
-
-      {authorProfile.bio && (
-        <p className="font-ui text-sm leading-relaxed mb-10" style={{ color: "var(--ink)" }}>
-          {authorProfile.bio}
-        </p>
-      )}
 
       <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4" style={{ color: "var(--sage)" }}>
         Recueils
@@ -3665,11 +3784,19 @@ export default function App() {
 
   const [weather, setWeather] = useState([]);
   useEffect(() => {
-    const all = ["snow", "rain", "sun"];
-    // Pick 1-2 effects randomly, always include at least one
-    const shuffled = all.sort(() => Math.random() - 0.5);
-    const count = Math.random() < 0.35 ? 2 : 1; // 35% chance of two effects
-    setWeather(shuffled.slice(0, count));
+    // All available effects (no sun — removed)
+    const pools = [
+      ["snow"],
+      ["rain"],
+      ["leaves"],
+      ["sakura"],
+      ["wind", "sakura"],   // calm wind + petals
+      ["wind", "leaves"],   // wind + autumn
+      ["storm"],            // heavy rain + lightning
+      ["snow", "wind"],     // snowstorm (no lightning)
+      ["sakura", "snow"],   // sakura + light snow
+    ];
+    setWeather(pools[Math.floor(Math.random() * pools.length)]);
   }, []);
 
   const [session, setSession] = useState(null);
@@ -3971,12 +4098,37 @@ export default function App() {
         input:focus, textarea:focus { ring-color: var(--wine); }
 
         @keyframes snowfall {
-          0% { transform: translateY(-6vh); }
-          100% { transform: translateY(106vh); }
+          0% { transform: translateY(-6vh) translateX(0); }
+          50% { transform: translateY(53vh) translateX(12px); }
+          100% { transform: translateY(108vh) translateX(-8px); }
         }
         @keyframes rainfall {
-          0% { transform: translateY(-10vh) rotate(10deg); }
-          100% { transform: translateY(110vh) rotate(10deg); }
+          0% { transform: translateY(-10vh) rotate(12deg); }
+          100% { transform: translateY(112vh) rotate(12deg); }
+        }
+        @keyframes leaffall {
+          0%   { transform: translateY(-5vh) translateX(0) rotate(0deg); opacity: 0; }
+          10%  { opacity: 0.9; }
+          90%  { opacity: 0.7; }
+          100% { transform: translateY(108vh) translateX(var(--drift)) rotate(var(--rot)); opacity: 0; }
+        }
+        @keyframes sakurafall {
+          0%   { transform: translateY(-5vh) translateX(0) rotate(0deg); opacity: 0; }
+          8%   { opacity: 0.9; }
+          85%  { opacity: 0.7; }
+          100% { transform: translateY(108vh) translateX(var(--drift)) rotate(var(--rot)); opacity: 0; }
+        }
+        @keyframes windstreakR {
+          0%   { transform: translateX(-120px); opacity: 0; }
+          20%  { opacity: 1; }
+          80%  { opacity: 0.8; }
+          100% { transform: translateX(110vw); opacity: 0; }
+        }
+        @keyframes windstreakL {
+          0%   { transform: translateX(120px); opacity: 0; }
+          20%  { opacity: 1; }
+          80%  { opacity: 0.8; }
+          100% { transform: translateX(-110vw); opacity: 0; }
         }
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(6px); }
@@ -3985,9 +4137,12 @@ export default function App() {
         .view-enter { animation: fadeIn 0.35s ease-out; }
       `}</style>
 
-      {weather.includes("snow") && <SideSnow darkMode={darkMode} />}
+      {weather.includes("snow") && <SideSnow />}
       {weather.includes("rain") && <SideRain />}
-      {weather.includes("sun") && <SideSun />}
+      {weather.includes("leaves") && <SideLeaves />}
+      {weather.includes("sakura") && <SideSakura />}
+      {weather.includes("wind") && <SideWind />}
+      {weather.includes("storm") && <SideStorm />}
 
       <div className="relative" style={{ zIndex: 1 }}>
         <TopNav
