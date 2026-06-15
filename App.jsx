@@ -123,9 +123,9 @@ function AuthorBadge({ avatarUrl, letter, color, size = 36 }) {
   return <WaxSeal letter={letter} color={resolvedColor} size={size} />;
 }
 
-function TopNav({ view, setView, session, profile, goToWrite, notifCount, dmCount }) {
+function TopNav({ view, setView, session, profile, goToWrite, notifCount, dmCount, discoverNewCount, onOpenDiscover }) {
   const items = [
-    { key: "home", label: "Découvrir", icon: BookOpen },
+    { key: "home", label: "Découvrir", icon: BookOpen, badge: discoverNewCount },
     { key: "write", label: "Écrire", icon: PenLine },
   ];
   if (session) {
@@ -154,7 +154,11 @@ function TopNav({ view, setView, session, profile, goToWrite, notifCount, dmCoun
             return (
               <button
                 key={key}
-                onClick={() => (key === "write" ? goToWrite() : setView(key))}
+                onClick={() => {
+                  if (key === "write") { goToWrite(); return; }
+                  if (key === "home" && onOpenDiscover) onOpenDiscover();
+                  setView(key);
+                }}
                 className="relative flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full text-sm font-ui transition-colors"
                 style={{
                   color: active ? "var(--paper-warm)" : "var(--ink)",
@@ -407,85 +411,115 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
             Aucun recueil ne correspond à « {query} ».
           </p>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filtered.map((c) => {
               const spineColor = c.sealColor || colorFromString(c.title);
+              const totalLikes = (c.poems||[]).reduce((s,p) => s + (p.likes_count||0), 0);
+              const isNew = Date.now() - new Date(c.created_at).getTime() < 48 * 3600 * 1000;
+              // Derive a dark bg from spineColor for the cover tint
               return (
                 <button
                   key={c.id}
                   onClick={() => openCollection(c, 0)}
                   className="text-left group relative"
-                  style={{ perspective: "600px" }}
                 >
-                  {/* Book wrapper */}
+                  {/* Book shadow lift on hover */}
                   <div
-                    className="relative flex rounded-sm overflow-hidden transition-all duration-300 group-hover:shadow-2xl"
+                    className="relative overflow-hidden transition-all duration-300"
                     style={{
-                      boxShadow: `4px 4px 20px rgba(0,0,0,0.4), inset -3px 0 6px rgba(0,0,0,0.3)`,
-                      transform: "translateY(0)",
-                      transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                      borderRadius: "3px 8px 8px 3px",
+                      boxShadow: `-3px 0 8px rgba(0,0,0,0.6), 4px 4px 24px rgba(0,0,0,0.5)`,
                     }}
-                    onMouseEnter={e => e.currentTarget.style.transform = "translateY(-4px) rotateY(-3deg)"}
-                    onMouseLeave={e => e.currentTarget.style.transform = "translateY(0) rotateY(0)"}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = "translateY(-5px)";
+                      e.currentTarget.style.boxShadow = `-3px 0 12px rgba(0,0,0,0.8), 8px 10px 36px rgba(0,0,0,0.65)`;
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.boxShadow = `-3px 0 8px rgba(0,0,0,0.6), 4px 4px 24px rgba(0,0,0,0.5)`;
+                    }}
                   >
                     {/* Spine */}
-                    <div
-                      className="shrink-0 flex flex-col items-center justify-between py-4 px-1.5"
-                      style={{ width: 22, background: spineColor }}
-                    >
-                      <div
-                        className="font-display italic text-[9px] writing-mode-vertical"
-                        style={{
-                          color: "rgba(255,255,255,0.7)",
-                          writingMode: "vertical-rl",
-                          textOrientation: "mixed",
-                          transform: "rotate(180deg)",
-                          letterSpacing: "0.05em",
-                          maxHeight: 100,
-                          overflow: "hidden",
-                        }}
-                      >
-                        {c.title}
-                      </div>
-                      <div
-                        className="w-1 h-1 rounded-full"
-                        style={{ background: "rgba(255,255,255,0.3)" }}
-                      />
+                    <div className="absolute left-0 top-0 bottom-0 z-10" style={{ width: 10, background: `linear-gradient(to bottom, ${spineColor}dd, ${spineColor}88)` }}>
+                      <div className="absolute left-[3px] top-3 bottom-3 w-px" style={{ background: "rgba(255,255,255,0.2)" }} />
                     </div>
 
-                    {/* Cover */}
-                    <div className="flex-1 min-w-0" style={{ background: "var(--paper-warm)" }}>
+                    {/* Cover area */}
+                    <div className="relative pl-[10px]" style={{ height: 220 }}>
+                      {/* Background — image or color */}
                       {c.cover_url ? (
-                        <div className="relative" style={{ height: 140 }}>
-                          <img src={c.cover_url} alt="" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--paper-warm))" }} />
-                        </div>
+                        <img src={c.cover_url} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ left: 10 }} />
                       ) : (
-                        <div
-                          className="flex items-center justify-center"
-                          style={{ height: 100, background: `${spineColor}18` }}
-                        >
-                          <span
-                            className="font-display italic"
-                            style={{ fontSize: 48, color: `${spineColor}40` }}
-                          >
-                            {c.seal}
-                          </span>
+                        <div className="absolute inset-0" style={{ left: 10, background: `linear-gradient(160deg, #0F0E18 0%, ${spineColor}22 60%, #0F0E18 100%)` }} />
+                      )}
+
+                      {/* Overlay — always dark, tinted by spine color */}
+                      <div className="absolute inset-0 z-[1]" style={{
+                        left: 10,
+                        background: c.cover_url
+                          ? `linear-gradient(160deg, rgba(8,6,20,0.85) 0%, ${spineColor}55 50%, rgba(5,4,15,0.92) 100%)`
+                          : `linear-gradient(160deg, rgba(8,6,20,0.6) 0%, transparent 60%, rgba(5,4,15,0.7) 100%)`
+                      }} />
+
+                      {/* Petal SVG decorations */}
+                      <svg className="absolute inset-0 w-full h-full z-[2] pointer-events-none" style={{ left: 10 }} viewBox="0 0 150 220" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+                        <ellipse cx="25" cy="30" rx="14" ry="6" fill={spineColor} opacity="0.45" transform="rotate(-30 25 30)"/>
+                        <ellipse cx="128" cy="22" rx="11" ry="4.5" fill={spineColor} opacity="0.3" transform="rotate(20 128 22)"/>
+                        <ellipse cx="15" cy="160" rx="9" ry="3.5" fill={spineColor} opacity="0.25" transform="rotate(45 15 160)"/>
+                        <ellipse cx="135" cy="170" rx="13" ry="5" fill="#C9A87C" opacity="0.12" transform="rotate(-20 135 170)"/>
+                        <circle cx="118" cy="75" r="1.8" fill="#C9A87C" opacity="0.4"/>
+                        <circle cx="32" cy="110" r="1.3" fill="#C9A87C" opacity="0.3"/>
+                        <circle cx="95" cy="145" r="2" fill={spineColor} opacity="0.35"/>
+                      </svg>
+
+                      {/* Gold ornament top line */}
+                      <div className="absolute z-[3]" style={{ top: 10, left: 20, right: 10 }}>
+                        <div style={{ height: 1, background: `linear-gradient(to right, transparent, rgba(201,168,124,0.5), transparent)` }} />
+                      </div>
+
+                      {/* Big sigil */}
+                      <div className="absolute inset-0 z-[3] flex items-center justify-center" style={{ left: 10 }}>
+                        <span className="font-display italic" style={{
+                          fontSize: 72, fontWeight: 300, lineHeight: 1,
+                          color: spineColor,
+                          opacity: c.cover_url ? 0.35 : 0.6,
+                          textShadow: `0 0 24px ${spineColor}`,
+                          fontFamily: "'Fraunces', serif",
+                        }}>
+                          {c.seal}
+                        </span>
+                      </div>
+
+                      {/* Collab badge */}
+                      {c.is_collab && (
+                        <div className="absolute top-2 right-2 z-[4] flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: "rgba(201,168,124,0.12)", color: "#C9A87C", border: "1px solid rgba(201,168,124,0.3)" }}>
+                          <Crown size={8} /> Collab
                         </div>
                       )}
 
-                      <div className="p-4">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <h3 className="font-display italic text-base leading-tight" style={{ color: "var(--ink)" }}>
+                      {/* New badge */}
+                      {isNew && (
+                        <div className="absolute top-2 left-4 z-[4] px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: `${spineColor}33`, color: spineColor, border: `1px solid ${spineColor}55` }}>
+                          Nouveau
+                        </div>
+                      )}
+
+                      {/* Gold ornament bottom line */}
+                      <div className="absolute z-[3]" style={{ bottom: 52, left: 20, right: 10 }}>
+                        <div style={{ height: 1, background: `linear-gradient(to right, transparent, rgba(201,168,124,0.3), transparent)` }} />
+                      </div>
+
+                      {/* Footer */}
+                      <div className="absolute bottom-0 left-0 right-0 z-[4]" style={{ paddingLeft: 10 }}>
+                        <div className="relative px-3 pb-3 pt-2">
+                          <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent, rgba(5,4,16,0.95))` }} />
+                          <div className="relative">
+                            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                              <p className="font-display italic text-sm leading-tight" style={{ fontFamily: "'Fraunces', serif", color: "#F0E8D8" }}>
                                 {c.title}
-                              </h3>
-                              {c.is_collab && (
-                                <Crown size={10} style={{ color: "var(--sage)", flexShrink: 0 }} />
-                              )}
+                              </p>
                             </div>
-                            <p className="font-ui text-xs mt-0.5" style={{ color: "var(--ink-light)" }}>
+                            <p className="font-ui text-[10px]" style={{ color: "rgba(201,168,124,0.7)" }}>
                               {c.author_id ? (
                                 <span role="button" onClick={(e) => { e.stopPropagation(); goToAuthor(c.author_id); }} className="hover:underline">
                                   {c.author}
@@ -493,42 +527,37 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
                               ) : c.author}
                             </p>
                           </div>
-                          <span
-                            className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
-                            style={{ color: spineColor, border: `1px solid ${spineColor}50`, background: `${spineColor}15` }}
-                          >
-                            {c.theme}
-                          </span>
-                        </div>
-
-                        <p className="font-display italic text-xs leading-relaxed mb-3" style={{ color: "var(--ink-light)" }}>
-                          « {c.poems?.[0]?.lines?.find((l) => l) || ""} »
-                        </p>
-
-                        <div className="flex items-center gap-3 pt-2 border-t" style={{ borderColor: "var(--rule)" }}>
-                          <span className="font-mono text-[10px]" style={{ color: "var(--ink-light)" }}>
-                            {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"}
-                          </span>
-                          <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: "var(--wine)" }}>
-                            <Heart size={10} fill="var(--wine)" />
-                            {(c.poems||[]).reduce((s,p) => s + (p.likes_count||0), 0)}
-                          </span>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Page edge effect */}
-                    <div
-                      className="absolute right-0 top-0 bottom-0"
-                      style={{
-                        width: 6,
-                        background: "linear-gradient(to right, var(--rule) 0%, var(--paper) 100%)",
-                        opacity: 0.4,
-                      }}
-                    />
+                      {/* Page edge */}
+                      <div className="absolute right-0 top-0 bottom-0 z-[5]" style={{
+                        width: 5,
+                        background: "repeating-linear-gradient(to bottom, #1E1A2B, #1E1A2B 2px, rgba(201,168,124,0.06) 2px, rgba(201,168,124,0.06) 3px)",
+                        borderRadius: "0 8px 8px 0",
+                      }} />
+                    </div>
+                  </div>
+
+                  {/* Info below book */}
+                  <div className="flex items-center justify-between mt-2 px-1">
+                    <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "rgba(201,168,124,0.5)" }}>
+                      {c.theme}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px]" style={{ color: "var(--ink-light)" }}>
+                        {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"}
+                      </span>
+                      {totalLikes > 0 && (
+                        <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: "var(--wine)" }}>
+                          <Heart size={9} fill="var(--wine)" /> {totalLikes}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
+            })}
             })}
           </div>
         )}
@@ -3626,6 +3655,7 @@ export default function App() {
   const [currentChallenge, setCurrentChallenge] = useState(null);
   const [notifCount, setNotifCount] = useState(0);
   const [dmCount, setDmCount] = useState(0);
+  const [discoverNewCount, setDiscoverNewCount] = useState(0);
   const [activeChallenge, setActiveChallenge] = useState(null);
   const [editingDraft, setEditingDraft] = useState(null);
   const [authorId, setAuthorId] = useState(null);
@@ -3750,13 +3780,21 @@ export default function App() {
       .limit(1)
       .maybeSingle();
     setCurrentChallenge(ch || null);
+
+    // Count items added since last Découvrir visit
+    const lastVisit = localStorage.getItem("last_discover_visit") || "1970-01-01T00:00:00Z";
+    const newCols = (cols || []).filter(c => new Date(c.created_at) > new Date(lastVisit) && (poems || []).some(p => p.collection_id === c.id && (p.status === "published" || !p.status)));
+    const newFree = (poems || []).filter(p => !p.collection_id && (p.status === "published" || !p.status) && new Date(p.created_at) > new Date(lastVisit));
+    setDiscoverNewCount(newCols.length + newFree.length);
   };
 
   const loadNotifCounts = async (sess, cols, freePs) => {
     if (!sess?.user?.id) { setNotifCount(0); setDmCount(0); return; }
     const uid = sess.user.id;
 
-    // Poems I authored
+    // Use stored timestamps — only count interactions AFTER last visit to Interactions tab
+    const lastInteractionSeen = localStorage.getItem(`last_interaction_seen_${uid}`) || "1970-01-01T00:00:00Z";
+
     const myPoemIds = [
       ...(cols || []).filter(c => c.author_id === uid).flatMap(c => (c.poems || []).map(p => p.id)),
       ...(freePs || []).filter(p => p.author_id === uid).map(p => p.id),
@@ -3764,36 +3802,36 @@ export default function App() {
 
     let interactionCount = 0;
     if (myPoemIds.length > 0) {
-      // New likes on my poems (not by me)
       const { count: likeCount } = await supabase.from("likes")
         .select("id", { count: "exact", head: true })
         .in("poem_id", myPoemIds)
-        .neq("voter_id", uid);
+        .neq("voter_id", uid)
+        .gt("created_at", lastInteractionSeen);
       interactionCount += likeCount || 0;
 
-      // New comments on my poems (not by me)
       const { count: commentCount } = await supabase.from("comments")
         .select("id", { count: "exact", head: true })
         .in("poem_id", myPoemIds)
         .neq("author_id", uid)
-        .is("parent_id", null);
+        .is("parent_id", null)
+        .gt("created_at", lastInteractionSeen);
       interactionCount += commentCount || 0;
     }
 
-    // Replies to my comments
     const { data: myComments } = await supabase.from("comments").select("id").eq("author_id", uid);
     const myCommentIds = (myComments || []).map(c => c.id);
     if (myCommentIds.length > 0) {
       const { count: replyCount } = await supabase.from("comments")
         .select("id", { count: "exact", head: true })
         .in("parent_id", myCommentIds)
-        .neq("author_id", uid);
+        .neq("author_id", uid)
+        .gt("created_at", lastInteractionSeen);
       interactionCount += replyCount || 0;
     }
     setNotifCount(interactionCount);
 
-    // Unread DMs: messages in my conversations not sent by me, after last visit
-    const lastDmVisit = localStorage.getItem("last_dm_visit") || "1970-01-01";
+    // DMs: messages after last DM tab visit
+    const lastDmVisit = localStorage.getItem(`last_dm_visit_${uid}`) || "1970-01-01T00:00:00Z";
     const { data: convs } = await supabase.from("conversations")
       .select("id")
       .or(`participant_a.eq.${uid},participant_b.eq.${uid}`);
@@ -3805,11 +3843,17 @@ export default function App() {
         .neq("sender_id", uid)
         .gt("created_at", lastDmVisit);
       setDmCount(unread || 0);
+    } else {
+      setDmCount(0);
     }
   };
 
   useEffect(() => {
     loadCollections();
+    // Set initial visit timestamp only if never visited before
+    if (!localStorage.getItem("last_discover_visit")) {
+      localStorage.setItem("last_discover_visit", new Date().toISOString());
+    }
   }, []);
 
   useEffect(() => {
@@ -3946,7 +3990,16 @@ export default function App() {
       {weather.includes("sun") && <SideSun />}
 
       <div className="relative" style={{ zIndex: 1 }}>
-        <TopNav view={view} setView={setView} session={session} profile={profile} goToWrite={() => { setEditingDraft(null); setView("write"); }} notifCount={notifCount} dmCount={dmCount} />
+        <TopNav
+          view={view} setView={setView} session={session} profile={profile}
+          goToWrite={() => { setEditingDraft(null); setView("write"); }}
+          notifCount={notifCount} dmCount={dmCount}
+          discoverNewCount={discoverNewCount}
+          onOpenDiscover={() => {
+            localStorage.setItem("last_discover_visit", new Date().toISOString());
+            setDiscoverNewCount(0);
+          }}
+        />
 
         {view === "home" && <HomeView collections={collections} topLiked={topLiked} freePoems={freePoems} openCollection={openCollection} openFreePoem={openFreePoem} goToAuthor={goToAuthor} currentChallenge={currentChallenge} onChallenge={() => { setActiveChallenge(currentChallenge); setView("challenge"); }} />}
         {view === "challenge" && activeChallenge && (
@@ -4057,7 +4110,10 @@ export default function App() {
             freePoems={freePoems}
             goToAuthor={goToAuthor}
             goToPoem={goToPoem}
-            onLoad={() => setNotifCount(0)}
+            onLoad={() => {
+              localStorage.setItem(`last_interaction_seen_${session.user.id}`, new Date().toISOString());
+              setNotifCount(0);
+            }}
           />
         )}
         {view === "dm" && session && (
@@ -4067,7 +4123,7 @@ export default function App() {
             initialRecipient={dmRecipient}
             onClearRecipient={() => setDmRecipient(null)}
             onOpen={() => {
-              localStorage.setItem("last_dm_visit", new Date().toISOString());
+              localStorage.setItem(`last_dm_visit_${session.user.id}`, new Date().toISOString());
               setDmCount(0);
             }}
           />
