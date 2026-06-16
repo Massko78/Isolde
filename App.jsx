@@ -2561,17 +2561,24 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
   useEffect(() => {
     let active = true;
     setLoading(true);
-    supabase.from("profiles").select("*").eq("id", authorId).single()
-      .then(({ data }) => { if (active) setAuthorProfile(data || null); });
-    if (session) {
-      supabase.from("follows").select("id").eq("follower_id", session.user.id).eq("followed_id", authorId).maybeSingle()
-        .then(({ data }) => { if (active) setIsFollowing(!!data); });
-    }
-    supabase.from("follows").select("id", { count: "exact", head: true }).eq("followed_id", authorId)
-      .then(({ count }) => { if (active) setFollowerCount(count || 0); });
-    supabase.from("follows").select("id", { count: "exact", head: true }).eq("follower_id", authorId)
-      .then(({ count }) => { if (active) setFollowingCount(count || 0); });
-    if (active) setLoading(false);
+    const fetchAll = async () => {
+      const [{ data: prof }, { count: fCount }, { count: ingCount }] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", authorId).maybeSingle(),
+        supabase.from("follows").select("id", { count: "exact", head: true }).eq("followed_id", authorId),
+        supabase.from("follows").select("id", { count: "exact", head: true }).eq("follower_id", authorId),
+      ]);
+      if (!active) return;
+      setAuthorProfile(prof || null);
+      setFollowerCount(fCount || 0);
+      setFollowingCount(ingCount || 0);
+      if (session) {
+        const { data: followRow } = await supabase.from("follows").select("id")
+          .eq("follower_id", session.user.id).eq("followed_id", authorId).maybeSingle();
+        if (active) setIsFollowing(!!followRow);
+      }
+      if (active) setLoading(false);
+    };
+    fetchAll();
     return () => { active = false; };
   }, [authorId, session]);
 
