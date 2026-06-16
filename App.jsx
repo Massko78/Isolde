@@ -835,12 +835,6 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
 
   const submitComment = async (content, parentId = null) => {
     if (!content.trim()) return;
-    const lastTime = parseInt(localStorage.getItem("last_comment_time") || "0", 10);
-    const elapsed = Date.now() - lastTime;
-    if (elapsed < 30000) {
-      setCommentError(`Attends encore ${Math.ceil((30000 - elapsed) / 1000)}s avant de publier un nouveau commentaire.`);
-      return;
-    }
     setCommentError("");
     const newComment = {
       poem_id: poem.id,
@@ -853,7 +847,6 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
     const { data, error } = await supabase.from("comments").insert(newComment).select().single();
     if (!error && data) {
       setComments((prev) => [...prev, { ...data, authorAvatar: commentAnon ? null : profile?.avatar_url }]);
-      localStorage.setItem("last_comment_time", String(Date.now()));
       if (parentId) {
         setReplyingTo(null);
         setReplyDraft("");
@@ -2603,64 +2596,96 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
 
   if (loading || !authorProfile) {
     return (
-      <div className="max-w-3xl mx-auto px-6 py-24 text-center">
-        <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>
-          Chargement du profil...
-        </p>
+      <div className="max-w-4xl mx-auto px-6 py-24 text-center">
+        <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>Chargement...</p>
       </div>
     );
   }
 
-  return (
-    <div className="max-w-3xl mx-auto px-6 py-8 view-enter">
-      <button onClick={back} className="flex items-center gap-2 font-ui text-sm mb-6 transition-opacity hover:opacity-70" style={{ color: "var(--ink-light)" }}>
-        <ArrowLeft size={15} /> Retour
-      </button>
+  const sc = colorFromString(authorProfile.username);
 
-      <div className="relative rounded-2xl overflow-hidden mb-8 p-7" style={{
-        background: `linear-gradient(135deg, ${colorFromString(authorProfile.username)}1A 0%, var(--paper-warm) 100%)`,
-        border: "1px solid var(--rule)",
-      }}>
-        <div className="flex items-start gap-6 flex-wrap relative">
-          {authorProfile.avatar_url ? (
-            <img src={authorProfile.avatar_url} alt={authorProfile.username} className="rounded-full object-cover shrink-0" style={{ width: 88, height: 88, border: `3px solid ${colorFromString(authorProfile.username)}55` }} />
+  return (
+    <div className="max-w-4xl mx-auto pb-16 view-enter">
+
+      {/* Back button */}
+      <div className="px-6 pt-4">
+        <button onClick={back} className="flex items-center gap-2 font-ui text-sm hover:opacity-70 transition-opacity" style={{ color: "var(--ink-light)" }}>
+          <ArrowLeft size={15} /> Retour
+        </button>
+      </div>
+
+      {/* Banner */}
+      <div className="relative mb-0">
+        <div className="relative w-full overflow-hidden" style={{ height: 200 }}>
+          {authorProfile.banner_url ? (
+            <img src={authorProfile.banner_url} alt="" className="w-full h-full object-cover"
+              style={{ objectPosition: `center ${authorProfile.banner_position ?? 50}%` }} />
           ) : (
-            <WaxSeal letter={authorProfile.username.charAt(0).toUpperCase()} color={colorFromString(authorProfile.username)} size={88} />
+            <div className="w-full h-full" style={{ background: `linear-gradient(135deg, ${sc}44 0%, #0F0E18 60%, ${sc}22 100%)` }}>
+              <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="650" cy="50" rx="180" ry="80" fill={sc} transform="rotate(-15 650 50)"/>
+                <ellipse cx="720" cy="160" rx="130" ry="55" fill={sc} transform="rotate(10 720 160)"/>
+                <ellipse cx="550" cy="20" rx="90" ry="40" fill="#C9A87C" opacity="0.5" transform="rotate(-25 550 20)"/>
+                <circle cx="480" cy="90" r="6" fill="#C9A87C" opacity="0.4"/>
+                <circle cx="620" cy="130" r="4" fill="#C9A87C" opacity="0.3"/>
+              </svg>
+            </div>
           )}
-          <div className="flex-1 min-w-[160px]">
-            <h1 className="font-display italic mb-1" style={{ fontSize: "clamp(1.5rem,3.5vw,2.2rem)", color: "var(--ink)", lineHeight: 1.1 }}>
+          <div className="absolute bottom-0 left-0 right-0 h-24" style={{ background: "linear-gradient(to bottom, transparent, #0F0E18)" }} />
+        </div>
+
+        {/* Avatar overlaps banner */}
+        <div className="absolute left-6 sm:left-8" style={{ bottom: -48 }}>
+          {authorProfile.avatar_url ? (
+            <img src={authorProfile.avatar_url} alt={authorProfile.username} className="rounded-full object-cover"
+              style={{ width: 120, height: 120, border: "4px solid #0F0E18", boxShadow: `0 0 0 2px ${sc}88` }} />
+          ) : (
+            <div style={{ border: "4px solid #0F0E18", borderRadius: "50%", display: "inline-block", boxShadow: `0 0 0 2px ${sc}88` }}>
+              <WaxSeal letter={authorProfile.username.charAt(0).toUpperCase()} color={sc} size={120} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Info row */}
+      <div className="px-6 sm:px-8 pt-16 pb-6 border-b" style={{ borderColor: "var(--rule)" }}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="font-display italic mb-1" style={{ fontSize: "clamp(1.8rem,4vw,2.6rem)", color: "var(--ink)", lineHeight: 1.1 }}>
               {authorProfile.username}
             </h1>
-            <div className="flex items-center gap-4 mb-3 flex-wrap">
+            {authorProfile.bio && (
+              <p className="font-display italic text-base leading-relaxed mb-3" style={{ color: "var(--ink)", opacity: 0.75, maxWidth: 520 }}>
+                « {authorProfile.bio} »
+              </p>
+            )}
+            <div className="flex items-center gap-4 flex-wrap">
               <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>{authorCollections.length} recueil{authorCollections.length===1?"":"s"}</span>
               <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>{authorFreePoems.length} poème{authorFreePoems.length===1?"":"s"} libre{authorFreePoems.length===1?"":"s"}</span>
-              <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>{totalLikes} like{totalLikes===1?"":"s"}</span>
+              <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>❤ {totalLikes}</span>
               {followerCount !== null && (
                 <span className="font-mono text-xs font-semibold" style={{ color: "var(--wine)" }}>
-                  {followerCount} abonné{followerCount === 1 ? "" : "s"}
+                  {followerCount} abonné{followerCount===1?"":"s"}
                 </span>
               )}
               {followingCount !== null && (
                 <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
-                  {followingCount} abonnement{followingCount === 1 ? "" : "s"}
+                  {followingCount} suivi{followingCount===1?"":"s"}
                 </span>
               )}
             </div>
-            {authorProfile.bio && (
-              <p className="font-display italic text-base leading-relaxed" style={{ color: "var(--ink)", opacity: 0.8, maxWidth: 420 }}>
-                « {authorProfile.bio} »
-              </p>
-            )}
           </div>
+
           {session && !isSelf && (
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
-              <button onClick={toggleFollow} className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors"
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={toggleFollow}
+                className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors"
                 style={isFollowing ? { border: "1px solid var(--rule)", color: "var(--ink-light)" } : { background: "var(--ink)", color: "var(--paper-warm)" }}>
                 {isFollowing ? <UserMinus size={15} /> : <UserPlus size={15} />}
                 {isFollowing ? "Ne plus suivre" : "Suivre"}
               </button>
               <button onClick={() => goToDM({ id: authorId, username: authorProfile.username, avatar_url: authorProfile.avatar_url })}
-                className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full transition-colors border"
+                className="flex items-center gap-2 font-ui text-sm px-5 py-2.5 rounded-full border transition-colors"
                 style={{ borderColor: "var(--rule)", color: "var(--ink)" }}>
                 <Mail size={15} /> Message
               </button>
@@ -2669,69 +2694,105 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
         </div>
       </div>
 
-      <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4" style={{ color: "var(--sage)" }}>
-        Recueils
-      </p>
-      {authorCollections.length === 0 ? (
-        <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-          Aucun recueil pour le moment.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {authorCollections.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => openCollection(c, 0)}
-              className="flex items-center justify-between p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
-              style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-            >
-              <div className="flex items-center gap-4">
-                <button onClick={e => { e.stopPropagation(); if (c.author_id) goToAuthor(c.author_id); }}>
-                  <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
-                </button>
-                <div>
-                  <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
-                    {c.title}
-                  </p>
-                  <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
-                    {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"} · {c.theme}
-                  </p>
-                </div>
-              </div>
-              <ArrowRight size={16} style={{ color: "var(--ink-light)" }} />
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Content */}
+      <div className="px-6 sm:px-8">
 
-      {authorFreePoems.length > 0 && (
-        <>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] mt-8 mb-4" style={{ color: "var(--sage)" }}>
-            Poèmes libres
+        {/* Recueils — book cards */}
+        {authorCollections.length > 0 && (
+          <section className="mt-8 mb-12">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5 flex items-center gap-2" style={{ color: "var(--sage)" }}>
+              <BookOpen size={12} /> Recueils
+            </p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {authorCollections.map((c) => {
+                const csc = c.sealColor || colorFromString(c.title);
+                const totalL = (c.poems||[]).reduce((s,p) => s+(p.likes_count||0), 0);
+                return (
+                  <button key={c.id} onClick={() => openCollection(c, 0)} className="text-left group relative">
+                    <div className="relative overflow-hidden transition-all duration-300"
+                      style={{ borderRadius: "3px 8px 8px 3px", boxShadow: "-3px 0 8px rgba(0,0,0,0.6), 4px 4px 24px rgba(0,0,0,0.5)" }}
+                      onMouseEnter={e => { e.currentTarget.style.transform="translateY(-5px)"; e.currentTarget.style.boxShadow="-3px 0 12px rgba(0,0,0,0.8),8px 10px 36px rgba(0,0,0,0.65)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="-3px 0 8px rgba(0,0,0,0.6),4px 4px 24px rgba(0,0,0,0.5)"; }}
+                    >
+                      <div className="absolute left-0 top-0 bottom-0 z-10" style={{ width: 10, background: `linear-gradient(to bottom, ${csc}dd, ${csc}88)` }}>
+                        <div className="absolute left-[3px] top-3 bottom-3 w-px" style={{ background: "rgba(255,255,255,0.2)" }} />
+                      </div>
+                      <div className="relative pl-[10px]" style={{ height: 200 }}>
+                        {c.cover_url ? (
+                          <img src={c.cover_url} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ left: 10 }} />
+                        ) : (
+                          <div className="absolute inset-0" style={{ left: 10, background: `linear-gradient(160deg, #0F0E18 0%, ${csc}22 60%, #0F0E18 100%)` }} />
+                        )}
+                        <div className="absolute inset-0 z-[1]" style={{ left: 10, background: c.cover_url ? `linear-gradient(160deg,rgba(8,6,20,0.85) 0%,${csc}55 50%,rgba(5,4,15,0.92) 100%)` : `linear-gradient(160deg,rgba(8,6,20,0.6) 0%,transparent 60%,rgba(5,4,15,0.7) 100%)` }} />
+                        <svg className="absolute inset-0 w-full h-full z-[2] pointer-events-none" style={{ left: 10 }} viewBox="0 0 150 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+                          <ellipse cx="25" cy="30" rx="14" ry="6" fill={csc} opacity="0.45" transform="rotate(-30 25 30)"/>
+                          <ellipse cx="128" cy="22" rx="11" ry="4.5" fill={csc} opacity="0.3" transform="rotate(20 128 22)"/>
+                          <circle cx="118" cy="75" r="1.8" fill="#C9A87C" opacity="0.4"/>
+                        </svg>
+                        <div className="absolute z-[3]" style={{ top: 10, left: 20, right: 10 }}>
+                          <div style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(201,168,124,0.5), transparent)" }} />
+                        </div>
+                        <div className="absolute inset-0 z-[3] flex items-center justify-center" style={{ left: 10 }}>
+                          <span style={{ fontFamily:"'Fraunces',serif", fontStyle:"italic", fontSize:64, fontWeight:300, lineHeight:1, color:csc, opacity:c.cover_url?0.3:0.55, textShadow:`0 0 24px ${csc}` }}>{c.seal}</span>
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 z-[4]" style={{ paddingLeft: 10 }}>
+                          <div className="relative px-3 pb-3 pt-2">
+                            <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent, rgba(5,4,16,0.95))" }} />
+                            <div className="relative">
+                              <p style={{ fontFamily:"'Fraunces',serif", fontStyle:"italic", fontSize:13, color:"#F0E8D8", marginBottom:2, lineHeight:1.3 }}>{c.title}</p>
+                              <p style={{ fontSize:10, color:"rgba(201,168,124,0.7)" }}>{c.theme} · {(c.poems||[]).length} poème{(c.poems||[]).length===1?"":"s"}{totalL > 0 ? ` · ❤ ${totalL}` : ""}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="absolute right-0 top-0 bottom-0 z-[5]" style={{ width:5, background:"repeating-linear-gradient(to bottom,#1E1A2B,#1E1A2B 2px,rgba(201,168,124,0.06) 2px,rgba(201,168,124,0.06) 3px)", borderRadius:"0 8px 8px 0" }} />
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Poèmes libres */}
+        {authorFreePoems.length > 0 && (
+          <section className="mb-12">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5 flex items-center gap-2" style={{ color: "var(--sage)" }}>
+              <PenLine size={12} /> Poèmes libres
+            </p>
+            <div className="flex flex-col gap-4">
+              {authorFreePoems.map((p) => {
+                const preview = (p.lines || []).filter(l => l.trim()).slice(0, 3);
+                const psc = colorFromString(p.title);
+                return (
+                  <button key={p.id} onClick={() => openFreePoem(p)}
+                    className="text-left p-5 rounded-xl border transition-all hover:shadow-md"
+                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)", borderLeft: `3px solid ${psc}` }}>
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <p className="font-display italic text-xl" style={{ color: "var(--ink)" }}>{p.title}</p>
+                      <div className="flex items-center gap-1 shrink-0" style={{ color: "var(--wine)" }}>
+                        <Heart size={13} fill={p.likes_count > 0 ? "var(--wine)" : "none"} />
+                        <span className="font-mono text-xs">{p.likes_count}</span>
+                      </div>
+                    </div>
+                    <div className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                      {preview.map((line, i) => <p key={i}>{line}</p>)}
+                      {(p.lines||[]).filter(l=>l.trim()).length > 3 && <p style={{ opacity:0.4, fontSize:11 }}>…</p>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {authorCollections.length === 0 && authorFreePoems.length === 0 && (
+          <p className="font-display italic text-xl mt-10" style={{ color: "var(--ink-light)" }}>
+            Cet auteur n'a rien publié pour le moment.
           </p>
-          <div className="flex flex-col gap-3">
-            {authorFreePoems.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => openFreePoem(p)}
-                className="flex items-center justify-between p-5 rounded-lg border text-left transition-colors hover:shadow-sm"
-                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-display italic text-lg mb-1" style={{ color: "var(--ink)" }}>{p.title}</p>
-                  <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
-                    « {(p.lines || []).find(l => l) || ""} »
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 ml-3 shrink-0" style={{ color: "var(--wine)" }}>
-                  <Heart size={13} fill={p.likes_count > 0 ? "var(--wine)" : "none"} />
-                  <span className="font-mono text-xs">{p.likes_count}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+        )}
+
+      </div>
     </div>
   );
 }
