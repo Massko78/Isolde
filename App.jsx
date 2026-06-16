@@ -2525,37 +2525,47 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
   );
 }
 
-function FollowingView({ session, collections, openCollection, goToAuthor }) {
+function FollowingView({ session, collections, freePoems, openCollection, openFreePoem, goToAuthor, goToDM }) {
   const [followedIds, setFollowedIds] = useState(null);
+  const [followedProfiles, setFollowedProfiles] = useState({});
 
-  useEffect(() => {
-    let active = true;
-    supabase
+  const reload = async () => {
+    const { data } = await supabase
       .from("follows")
       .select("followed_id")
-      .eq("follower_id", session.user.id)
-      .then(({ data }) => {
-        if (active) setFollowedIds((data || []).map((f) => f.followed_id));
-      });
-    return () => {
-      active = false;
-    };
-  }, [session.user.id]);
+      .eq("follower_id", session.user.id);
+    const ids = (data || []).map((f) => f.followed_id);
+    setFollowedIds(ids);
+    if (ids.length > 0) {
+      const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", ids);
+      const map = {};
+      (profs || []).forEach(p => { map[p.id] = p; });
+      setFollowedProfiles(map);
+    }
+  };
 
-  // Leaderboard: total likes per author
+  useEffect(() => { reload(); }, [session.user.id]);
+
+  // Leaderboard
   const authorStats = {};
   collections.forEach((c) => {
     if (!c.author_id) return;
     const likes = (c.poems || []).reduce((s, p) => s + (p.likes_count || 0), 0);
-    if (!authorStats[c.author_id]) authorStats[c.author_id] = { author: c.author, author_id: c.author_id, likes: 0, collections: 0 };
+    if (!authorStats[c.author_id]) authorStats[c.author_id] = { author: c.author, author_id: c.author_id, authorAvatar: c.authorAvatar, likes: 0, collections: 0 };
     authorStats[c.author_id].likes += likes;
     authorStats[c.author_id].collections += 1;
   });
-  const leaderboard = Object.values(authorStats)
-    .sort((a, b) => b.likes - a.likes)
-    .slice(0, 5);
+  const leaderboard = Object.values(authorStats).sort((a, b) => b.likes - a.likes).slice(0, 5);
 
-  const feed = followedIds === null ? null : collections.filter((c) => followedIds.includes(c.author_id));
+  // Feed of followed authors — collections + free poems sorted by date
+  const feed = followedIds === null ? null : [
+    ...collections
+      .filter((c) => followedIds.includes(c.author_id))
+      .map(c => ({ type: "collection", item: c, date: c.updated_at || c.created_at })),
+    ...(freePoems || [])
+      .filter(p => followedIds.includes(p.author_id))
+      .map(p => ({ type: "poem", item: p, date: p.updated_at || p.created_at })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12 view-enter">
@@ -2574,31 +2584,36 @@ function FollowingView({ session, collections, openCollection, goToAuthor }) {
         ) : (
           <div className="flex flex-col gap-2">
             {leaderboard.map((a, i) => (
-              <button
-                key={a.author_id}
-                onClick={() => goToAuthor(a.author_id)}
-                className="flex items-center justify-between p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
-                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-              >
+              <div key={a.author_id} className="flex items-center justify-between p-4 rounded-lg border" style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}>
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-sm w-5 text-center" style={{ color: "var(--ink-light)" }}>
-                    {i + 1}
-                  </span>
-                  <WaxSeal letter={a.author.charAt(0).toUpperCase()} color="var(--wine)" size={32} />
+                  <span className="font-mono text-sm w-5 text-center" style={{ color: "var(--ink-light)" }}>{i + 1}</span>
+                  <button onClick={() => goToAuthor(a.author_id)}>
+                    <AuthorBadge avatarUrl={a.authorAvatar} letter={a.author.charAt(0).toUpperCase()} color={colorFromString(a.author)} size={36} />
+                  </button>
                   <div>
-                    <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>
+                    <button onClick={() => goToAuthor(a.author_id)} className="font-display italic text-base hover:underline" style={{ color: "var(--ink)" }}>
                       {a.author}
-                    </p>
+                    </button>
                     <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
                       {a.collections} recueil{a.collections === 1 ? "" : "s"}
                     </p>
                   </div>
                 </div>
-                <span className="flex items-center gap-1.5 font-mono text-sm" style={{ color: "var(--wine)" }}>
-                  <Heart size={13} fill="var(--wine)" />
-                  {a.likes}
-                </span>
-              </button>
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5 font-mono text-sm" style={{ color: "var(--wine)" }}>
+                    <Heart size={13} fill="var(--wine)" />{a.likes}
+                  </span>
+                  {session && goToDM && (
+                    <button
+                      onClick={() => goToDM({ id: a.author_id, username: a.author, avatar_url: a.authorAvatar })}
+                      className="font-ui text-xs px-3 py-1.5 rounded-full border transition-opacity hover:opacity-70"
+                      style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
+                    >
+                      <Mail size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -2613,39 +2628,68 @@ function FollowingView({ session, collections, openCollection, goToAuthor }) {
           </h2>
         </div>
         {feed === null ? (
-          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-            Chargement...
-          </p>
+          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Chargement...</p>
         ) : feed.length === 0 ? (
           <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-            Tu ne suis encore personne. Va sur le profil d'un auteur depuis "Découvrir" pour le suivre — ses nouveaux recueils apparaîtront ici.
+            Tu ne suis encore personne. Va sur le profil d'un auteur pour le suivre.
           </p>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-5">
-            {feed.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => openCollection(c, 0)}
-                className="text-left p-6 rounded-lg border transition-colors hover:shadow-sm"
-                style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
-                  <span
-                    className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded-full"
-                    style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}
-                  >
-                    {c.theme}
-                  </span>
-                </div>
-                <h3 className="font-display italic text-xl mb-1" style={{ color: "var(--ink)" }}>
-                  {c.title}
-                </h3>
-                <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-                  {c.author} · {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"}
-                </p>
-              </button>
-            ))}
+          <div className="flex flex-col gap-3">
+            {feed.map(({ type, item, date }) => {
+              if (type === "collection") {
+                const c = item;
+                const sc = c.sealColor || colorFromString(c.title);
+                return (
+                  <button key={`col-${c.id}`} onClick={() => openCollection(c, 0)}
+                    className="flex items-start gap-4 p-4 rounded-xl border text-left transition-all hover:shadow-md"
+                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)", borderLeft: `3px solid ${sc}` }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center font-display italic text-sm shrink-0" style={{ background: sc, color: "var(--paper-warm)" }}>
+                      {c.seal}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-display italic text-base mb-0.5" style={{ color: "var(--ink)" }}>{c.title}</p>
+                      <p className="font-ui text-xs mb-1" style={{ color: "var(--ink-light)" }}>
+                        <button onClick={e => { e.stopPropagation(); goToAuthor(c.author_id); }} className="hover:underline">{c.author}</button>
+                        {" · "}{timeAgo(date)}{" · "}
+                        <span style={{ color: "var(--ink-light)" }}>{(c.poems||[]).length} poème{(c.poems||[]).length===1?"":"s"}</span>
+                      </p>
+                      <p className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                        « {c.poems?.[0]?.lines?.find(l=>l) || ""} »
+                      </p>
+                    </div>
+                    <span className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 self-start" style={{ color: sc, border: `1px solid ${sc}44`, background: `${sc}15` }}>
+                      Recueil
+                    </span>
+                  </button>
+                );
+              } else {
+                const p = item;
+                const sc = colorFromString(p.author || "?");
+                const preview = (p.lines || []).filter(l => l.trim()).slice(0, 2);
+                return (
+                  <button key={`poem-${p.id}`} onClick={() => openFreePoem(p)}
+                    className="flex items-start gap-4 p-4 rounded-xl border text-left transition-all hover:shadow-md"
+                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)", borderLeft: `3px solid ${sc}` }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center font-display italic text-sm shrink-0" style={{ background: sc, color: "var(--paper-warm)" }}>
+                      {(p.author || "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-display italic text-base mb-0.5" style={{ color: "var(--ink)" }}>{p.title}</p>
+                      <p className="font-ui text-xs mb-1" style={{ color: "var(--ink-light)" }}>
+                        <button onClick={e => { e.stopPropagation(); goToAuthor(p.author_id); }} className="hover:underline">{p.author}</button>
+                        {" · "}{timeAgo(date)}
+                      </p>
+                      <div className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                        {preview.map((line, i) => <p key={i}>{line}</p>)}
+                      </div>
+                    </div>
+                    <span className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 self-start" style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}>
+                      Libre
+                    </span>
+                  </button>
+                );
+              }
+            })}
           </div>
         )}
       </section>
@@ -2911,7 +2955,7 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
   );
 }
 
-function DMView({ session, profile, initialRecipient, onClearRecipient, onOpen }) {
+function DMView({ session, profile, initialRecipient, onClearRecipient, onOpen, goToAuthor }) {
   const [conversations, setConversations] = useState([]);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -3076,9 +3120,16 @@ function DMView({ session, profile, initialRecipient, onClearRecipient, onOpen }
                   borderColor: activeConv?.id === c.id ? "var(--ink)" : "var(--rule)",
                 }}
               >
-                <AuthorBadge avatarUrl={c.other.avatar_url} letter={c.other.username.charAt(0).toUpperCase()} color="var(--wine)" size={32} />
+                <div role="button" onClick={e => { e.stopPropagation(); goToAuthor(c.other.id); }}>
+                  <AuthorBadge avatarUrl={c.other.avatar_url} letter={c.other.username.charAt(0).toUpperCase()} color={colorFromString(c.other.username)} size={40} />
+                </div>
                 <div className="min-w-0">
-                  <p className="font-ui text-sm font-medium truncate" style={{ color: activeConv?.id === c.id ? "var(--paper-warm)" : "var(--ink)" }}>
+                  <p
+                    className="font-display italic text-base truncate hover:underline"
+                    style={{ color: activeConv?.id === c.id ? "var(--paper-warm)" : "var(--ink)" }}
+                    role="button"
+                    onClick={e => { e.stopPropagation(); goToAuthor(c.other.id); }}
+                  >
                     {c.other.username}
                   </p>
                   <p className="font-mono text-xs" style={{ color: activeConv?.id === c.id ? "rgba(255,255,255,0.5)" : "var(--ink-light)" }}>
@@ -3093,10 +3144,14 @@ function DMView({ session, profile, initialRecipient, onClearRecipient, onOpen }
         {/* Chat area */}
         {activeConv ? (
           <div className="flex flex-col rounded-lg border overflow-hidden" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)", minHeight: 400 }}>
-            {/* Header */}
+            {/* Header — bigger avatar + clickable */}
             <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: "var(--rule)" }}>
-              <AuthorBadge avatarUrl={activeConv.other.avatar_url} letter={activeConv.other.username.charAt(0).toUpperCase()} color="var(--wine)" size={30} />
-              <span className="font-display italic text-lg" style={{ color: "var(--ink)" }}>{activeConv.other.username}</span>
+              <button onClick={() => goToAuthor(activeConv.other.id)}>
+                <AuthorBadge avatarUrl={activeConv.other.avatar_url} letter={activeConv.other.username.charAt(0).toUpperCase()} color={colorFromString(activeConv.other.username)} size={40} />
+              </button>
+              <button onClick={() => goToAuthor(activeConv.other.id)} className="font-display italic text-xl hover:underline" style={{ color: "var(--ink)" }}>
+                {activeConv.other.username}
+              </button>
             </div>
 
             {/* Messages */}
@@ -4818,8 +4873,11 @@ export default function App() {
           <FollowingView
             session={session}
             collections={collections}
+            freePoems={freePoems}
             openCollection={openCollection}
+            openFreePoem={openFreePoem}
             goToAuthor={goToAuthor}
+            goToDM={goToDM}
           />
         )}
         {view === "interactions" && session && (
@@ -4841,6 +4899,7 @@ export default function App() {
             profile={profile}
             initialRecipient={dmRecipient}
             onClearRecipient={() => setDmRecipient(null)}
+            goToAuthor={goToAuthor}
             onOpen={() => {
               localStorage.setItem(`last_dm_visit_${session.user.id}`, new Date().toISOString());
               setDmCount(0);
