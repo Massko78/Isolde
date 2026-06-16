@@ -1874,7 +1874,7 @@ function WriteView({ session, profile, collections, editingDraft, goToAuth, onPu
   );
 }
 
-function ProfileView({ collections, draftPoems, freePoems, openCollection, openFreePoem, session, profile, setProfile, goToAuth, editDraft, onWrite }) {
+function ProfileView({ collections, draftPoems, freePoems, openCollection, openFreePoem, session, profile, setProfile, goToAuth, goToAuthor, editDraft, onWrite }) {
   const [editing, setEditing] = useState(false);
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -1884,9 +1884,10 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
   const [loadTimeout, setLoadTimeout] = useState(false);
   const [followerCount, setFollowerCount] = useState(null);
   const [followingCount, setFollowingCount] = useState(null);
-  const [showFollowers, setShowFollowers] = useState(null); // "followers" | "following" | null
+  const [showFollowers, setShowFollowers] = useState(null);
   const [followersList, setFollowersList] = useState([]);
   const [followingList, setFollowingList] = useState([]);
+  const [bannerUrl, setBannerUrl] = useState("");
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -1900,6 +1901,7 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
     setUsername(profile?.username || "");
     setBio(profile?.bio || "");
     setAvatarUrl(profile?.avatar_url || "");
+    setBannerUrl(profile?.banner_url || "");
   }, [profile]);
 
   // If profile still null after 4s, show an error instead of infinite spinner
@@ -1975,6 +1977,7 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
         username: username.trim(),
         bio: bio.trim() || null,
         avatar_url: avatarUrl.trim() || null,
+        banner_url: bannerUrl.trim() || null,
       })
       .eq("id", session.user.id)
       .select()
@@ -2015,34 +2018,65 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 pb-16 view-enter">
+    <div className="max-w-4xl mx-auto pb-16 view-enter">
 
       {/* ── HERO BANNER ── */}
-      <div className="relative rounded-2xl overflow-hidden mb-8 mt-8" style={{
-        background: `linear-gradient(135deg, ${colorFromString(profile.username)}22 0%, var(--paper-warm) 100%)`,
-        border: "1px solid var(--rule)",
-        minHeight: 180,
-      }}>
-        {/* Subtle petal decoration top-right */}
-        <svg className="absolute top-0 right-0 opacity-10 pointer-events-none" width="200" height="160" viewBox="0 0 200 160" xmlns="http://www.w3.org/2000/svg">
-          <ellipse cx="160" cy="30" rx="50" ry="22" fill={colorFromString(profile.username)} transform="rotate(-20 160 30)"/>
-          <ellipse cx="180" cy="80" rx="35" ry="15" fill={colorFromString(profile.username)} transform="rotate(15 180 80)"/>
-          <ellipse cx="130" cy="10" rx="28" ry="12" fill={colorFromString(profile.username)} transform="rotate(-35 130 10)"/>
-        </svg>
+      <div className="relative mb-0">
+        {/* Banner */}
+        <div className="relative w-full overflow-hidden" style={{ height: 200, borderRadius: "0 0 0 0" }}>
+          {profile.banner_url ? (
+            <img src={profile.banner_url} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full" style={{
+              background: `linear-gradient(135deg, ${colorFromString(profile.username)}44 0%, #0F0E18 60%, ${colorFromString(profile.username)}22 100%)`,
+            }}>
+              <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="650" cy="50" rx="180" ry="80" fill={colorFromString(profile.username)} transform="rotate(-15 650 50)"/>
+                <ellipse cx="720" cy="160" rx="130" ry="55" fill={colorFromString(profile.username)} transform="rotate(10 720 160)"/>
+                <ellipse cx="550" cy="20" rx="90" ry="40" fill="#C9A87C" opacity="0.5" transform="rotate(-25 550 20)"/>
+                <circle cx="480" cy="90" r="6" fill="#C9A87C" opacity="0.4"/>
+                <circle cx="620" cy="130" r="4" fill="#C9A87C" opacity="0.3"/>
+              </svg>
+            </div>
+          )}
+          {/* Gradient overlay bottom */}
+          <div className="absolute bottom-0 left-0 right-0 h-24" style={{ background: "linear-gradient(to bottom, transparent, #0F0E18)" }} />
 
-        <div className="relative p-8 flex items-start gap-7 flex-wrap">
-          {/* Big avatar */}
-          <div className="shrink-0">
+          {/* Edit banner button */}
+          {!editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="absolute bottom-3 right-3 flex items-center gap-1.5 font-ui text-xs px-3 py-1.5 rounded-full backdrop-blur-sm"
+              style={{ background: "rgba(15,14,24,0.7)", color: "var(--ink-light)", border: "1px solid rgba(255,255,255,0.1)" }}
+            >
+              <PenLine size={11} /> Modifier
+            </button>
+          )}
+        </div>
+
+        {/* Avatar — overlaps banner */}
+        <div className="absolute left-6 sm:left-8" style={{ bottom: -48 }}>
+          <div className="relative">
             {profile.avatar_url ? (
-              <img src={profile.avatar_url} alt={profile.username} className="rounded-full object-cover" style={{ width: 96, height: 96, border: `3px solid ${colorFromString(profile.username)}60` }} />
+              <img src={profile.avatar_url} alt={profile.username}
+                className="rounded-full object-cover"
+                style={{ width: 120, height: 120, border: "4px solid #0F0E18", boxShadow: `0 0 0 2px ${colorFromString(profile.username)}88` }}
+              />
             ) : (
-              <WaxSeal letter={profile.username.charAt(0).toUpperCase()} color={colorFromString(profile.username)} size={96} />
+              <div style={{ border: "4px solid #0F0E18", borderRadius: "50%", display: "inline-block", boxShadow: `0 0 0 2px ${colorFromString(profile.username)}88` }}>
+                <WaxSeal letter={profile.username.charAt(0).toUpperCase()} color={colorFromString(profile.username)} size={120} />
+              </div>
             )}
           </div>
+        </div>
+      </div>
 
-          <div className="flex-1 min-w-[180px]">
+      {/* Info row */}
+      <div className="px-6 sm:px-8 pt-16 pb-6 border-b" style={{ borderColor: "var(--rule)" }}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
             <div className="flex items-center gap-3 flex-wrap mb-1">
-              <h1 className="font-display italic" style={{ fontSize: "clamp(1.6rem,4vw,2.4rem)", color: "var(--ink)", lineHeight: 1.1 }}>
+              <h1 className="font-display italic" style={{ fontSize: "clamp(1.8rem,4vw,2.6rem)", color: "var(--ink)", lineHeight: 1.1 }}>
                 {profile.username}
               </h1>
               {profile.is_moderator && (
@@ -2052,7 +2086,13 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
               )}
             </div>
 
-            <div className="flex items-center gap-4 mb-3 flex-wrap">
+            {!editing && profile.bio && (
+              <p className="font-display italic text-base leading-relaxed mb-3" style={{ color: "var(--ink)", opacity: 0.75, maxWidth: 520 }}>
+                « {profile.bio} »
+              </p>
+            )}
+
+            <div className="flex items-center gap-4 flex-wrap">
               <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
                 {mine.length} recueil{mine.length === 1 ? "" : "s"}
               </span>
@@ -2060,38 +2100,25 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
                 {myFreePoems.length} poème{myFreePoems.length === 1 ? "" : "s"} libre{myFreePoems.length === 1 ? "" : "s"}
               </span>
               <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
-                {mine.reduce((s, c) => s + (c.poems||[]).reduce((ss, p) => ss + (p.likes_count||0), 0), 0) + myFreePoems.reduce((s, p) => s + (p.likes_count||0), 0)} like{mine.reduce((s,c)=>s+(c.poems||[]).reduce((ss,p)=>ss+(p.likes_count||0),0),0)+myFreePoems.reduce((s,p)=>s+(p.likes_count||0),0)===1?"":"s"} au total
+                ❤ {mine.reduce((s,c)=>s+(c.poems||[]).reduce((ss,p)=>ss+(p.likes_count||0),0),0)+myFreePoems.reduce((s,p)=>s+(p.likes_count||0),0)}
               </span>
               {followerCount !== null && (
-                <button onClick={() => openFollowPanel("followers")} className="font-mono text-xs font-semibold hover:underline" style={{ color: "var(--wine)" }}>
+                <button onClick={() => openFollowPanel("followers")} className="font-mono text-xs font-semibold hover:underline transition-opacity" style={{ color: "var(--wine)" }}>
                   {followerCount} abonné{followerCount === 1 ? "" : "s"}
                 </button>
               )}
               {followingCount !== null && (
-                <button onClick={() => openFollowPanel("following")} className="font-mono text-xs hover:underline" style={{ color: "var(--ink-light)" }}>
-                  {followingCount} abonnement{followingCount === 1 ? "" : "s"}
+                <button onClick={() => openFollowPanel("following")} className="font-mono text-xs hover:underline transition-opacity" style={{ color: "var(--ink-light)" }}>
+                  {followingCount} suivi{followingCount === 1 ? "" : "s"}
                 </button>
               )}
             </div>
-
-            {!editing && (
-              profile.bio ? (
-                <p className="font-display italic text-base leading-relaxed" style={{ color: "var(--ink)", opacity: 0.85, maxWidth: 480 }}>
-                  « {profile.bio} »
-                </p>
-              ) : (
-                <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-                  Aucune bio — ajoute quelques mots sur toi.
-                </p>
-              )
-            )}
           </div>
 
-          {/* Actions top-right */}
-          <div className="flex items-center gap-3 shrink-0 self-start">
+          <div className="flex items-center gap-3 shrink-0">
             {!editing && (
-              <button onClick={() => setEditing(true)} className="font-ui text-xs px-4 py-2 rounded-full border transition-opacity hover:opacity-70" style={{ borderColor: "var(--rule)", color: "var(--ink)" }}>
-                Modifier le profil
+              <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 font-ui text-xs px-4 py-2 rounded-full border transition-opacity hover:opacity-70" style={{ borderColor: "var(--rule)", color: "var(--ink)" }}>
+                <PenLine size={12} /> Modifier le profil
               </button>
             )}
             <button onClick={handleLogout} className="flex items-center gap-1.5 font-ui text-xs" style={{ color: "var(--ink-light)" }}>
@@ -2101,24 +2128,30 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
         </div>
       </div>
 
+      <div className="px-6 sm:px-8">
+
       {/* ── EDIT FORM ── */}
       {editing && (
-        <div className="flex flex-col gap-4 mb-10 p-6 rounded-xl border" style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}>
+        <div className="flex flex-col gap-5 my-8 p-6 rounded-2xl border" style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}>
+          <p className="font-mono text-xs uppercase tracking-[0.2em]" style={{ color: "var(--sage)" }}>Modifier le profil</p>
           <div className="grid sm:grid-cols-2 gap-4">
-            <label className="flex flex-col gap-2">
+            <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>Pseudo</span>
-              <input value={username} onChange={(e) => setUsername(e.target.value)} className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+              <input value={username} onChange={(e) => setUsername(e.target.value)} className="font-display italic text-base px-4 py-3 rounded-lg border bg-transparent outline-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
             </label>
-            <label className="flex flex-col gap-2">
+            <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "var(--ink-light)" }}>Bio</span>
-              <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={2} placeholder="Quelques mots sur toi..." className="font-ui text-sm px-4 py-3 rounded-md border bg-transparent outline-none resize-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
+              <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={2} placeholder="Quelques mots sur toi..." className="font-ui text-sm px-4 py-3 rounded-lg border bg-transparent outline-none resize-none" style={{ borderColor: "var(--rule)", color: "var(--ink)" }} />
             </label>
           </div>
-          <ImageField label="Photo de profil" value={avatarUrl} onChange={setAvatarUrl} session={session} maxHeightPreview={120} />
+          <div className="grid sm:grid-cols-2 gap-4">
+            <ImageField label="Photo de profil" value={avatarUrl} onChange={setAvatarUrl} session={session} maxHeightPreview={120} />
+            <ImageField label="Bannière (image de couverture)" value={bannerUrl} onChange={setBannerUrl} session={session} maxHeightPreview={80} />
+          </div>
           {errorMsg && <p className="font-ui text-sm" style={{ color: "var(--wine)" }}>{errorMsg}</p>}
           <div className="flex items-center gap-3">
-            <button onClick={handleSave} disabled={!username.trim() || saving} className="font-ui text-sm px-5 py-2.5 rounded-full disabled:opacity-30" style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
-              {saving ? "..." : "Enregistrer"}
+            <button onClick={handleSave} disabled={!username.trim() || saving} className="font-ui text-sm px-6 py-2.5 rounded-full disabled:opacity-30" style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
+              {saving ? "Enregistrement..." : "Enregistrer"}
             </button>
             <button onClick={() => setEditing(false)} className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Annuler</button>
           </div>
@@ -2127,7 +2160,7 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
 
       {/* ── MES RECUEILS — book cards ── */}
       {mine.length > 0 && (
-        <section className="mb-12">
+        <section className="mt-8 mb-12">
           <p className="font-mono text-xs uppercase tracking-[0.2em] mb-5 flex items-center gap-2" style={{ color: "var(--sage)" }}>
             <BookOpen size={12} /> Mes recueils
           </p>
@@ -2257,6 +2290,8 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
         </div>
       )}
 
+      </div> {/* end px-6 wrapper */}
+
       {/* Followers / Following overlay panel */}
       {showFollowers && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }} onClick={() => setShowFollowers(null)}>
@@ -2293,7 +2328,7 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
                 (showFollowers === "followers" ? followersList : followingList).map(p => (
                   <button
                     key={p.id}
-                    onClick={() => { setShowFollowers(null); /* goToAuthor handled by parent */ }}
+                    onClick={() => { setShowFollowers(null); goToAuthor(p.id); }}
                     className="flex items-center gap-3 w-full px-5 py-3 border-b text-left transition-colors hover:opacity-80"
                     style={{ borderColor: "var(--rule)" }}
                   >
@@ -5046,6 +5081,7 @@ export default function App() {
             profile={profile}
             setProfile={setProfile}
             goToAuth={() => setView("auth")}
+            goToAuthor={goToAuthor}
             editDraft={editDraft}
             onWrite={() => {
               setEditingDraft(null);
