@@ -242,7 +242,8 @@ function AuthorBadge({ avatarUrl, letter, color, size = 36 }) {
 function TopNav({ view, setView, session, profile, goToWrite, notifCount, dmCount, discoverNewCount, onOpenDiscover }) {
   const items = [
     { key: "home", label: "Découvrir", icon: BookOpen, badge: discoverNewCount },
-    { key: "library", label: "Inspiration", icon: Bookmark },
+    { key: "collections", label: "Recueils", icon: Bookmark },
+    { key: "library", label: "Inspiration", icon: Star },
     { key: "write", label: "Écrire", icon: PenLine },
   ];
   if (session) {
@@ -527,16 +528,16 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
               {allRecentPoems.length}
             </span>
           </div>
-          <div className="flex flex-col gap-3">
-            {allRecentPoems.map((p) => {
-              const preview = (p.lines || []).filter(l => l.trim()).slice(0, 2);
+          <div className="flex flex-col gap-4">
+            {allRecentPoems.map((p, idx) => {
+              const preview = (p.lines || []).filter(l => l.trim()).slice(0, idx < 3 ? 4 : 2);
               const sc = p.isFree
                 ? colorFromString(p.author || "?")
                 : (p.collection.sealColor || colorFromString(p.collection.title));
-
               const authorName = p.isFree ? p.author : p.collection.author;
               const authorId = p.isFree ? p.author_id : p.collection.author_id;
               const dateRef = p.collection?.updated_at || p.collection?.created_at || p.created_at;
+              const isFeatured = idx < 2;
 
               return (
                 <button
@@ -545,55 +546,98 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
                     if (p.isFree) openFreePoem(p);
                     else openCollection(p.collection, (p.collection.poems || []).findIndex(x => x.id === p.id));
                   }}
-                  className="flex items-start gap-4 p-4 rounded-xl border text-left transition-all hover:shadow-md"
-                  style={{ background: "var(--paper-warm)", borderColor: "var(--rule)", borderLeft: `3px solid ${sc}` }}
+                  className="text-left group transition-all hover:shadow-lg"
+                  style={{
+                    borderRadius: 14,
+                    border: `1px solid ${sc}33`,
+                    borderLeft: `4px solid ${sc}`,
+                    background: isFeatured
+                      ? `linear-gradient(135deg, ${sc}18 0%, var(--paper-warm) 60%)`
+                      : "var(--paper-warm)",
+                  }}
                 >
-                  {/* Avatar */}
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-display italic text-sm shrink-0 mt-0.5" style={{ background: sc, color: "var(--paper-warm)" }}>
-                    {p.isFree ? (p.author || "?").charAt(0).toUpperCase() : p.collection.seal}
-                  </div>
+                  <div className={`flex items-start gap-4 ${isFeatured ? "p-6" : "p-4"}`}>
+                    {/* Petal SVG decoration for featured */}
+                    {isFeatured && (
+                      <svg className="absolute right-4 top-4 pointer-events-none opacity-20" width="80" height="60" viewBox="0 0 80 60" xmlns="http://www.w3.org/2000/svg" style={{ position: "absolute" }}>
+                        <ellipse cx="60" cy="15" rx="18" ry="8" fill={sc} transform="rotate(-25 60 15)"/>
+                        <ellipse cx="70" cy="40" rx="13" ry="6" fill={sc} transform="rotate(15 70 40)"/>
+                        <circle cx="45" cy="10" r="2.5" fill="#C9A87C"/>
+                      </svg>
+                    )}
 
-                  <div className="flex-1 min-w-0">
-                    {/* Title + collection badge */}
-                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                      <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>
+                    {/* Avatar */}
+                    <div
+                      className="flex items-center justify-center font-display italic shrink-0 rounded-full"
+                      style={{
+                        width: isFeatured ? 44 : 32,
+                        height: isFeatured ? 44 : 32,
+                        fontSize: isFeatured ? 18 : 13,
+                        background: sc,
+                        color: "var(--paper-warm)",
+                        boxShadow: `0 0 12px ${sc}55`,
+                      }}
+                    >
+                      {p.isFree ? (p.author || "?").charAt(0).toUpperCase() : p.collection.seal}
+                    </div>
+
+                    <div className="flex-1 min-w-0 relative">
+                      {/* Title */}
+                      <p
+                        className="font-display italic mb-0.5"
+                        style={{
+                          fontSize: isFeatured ? "clamp(1.1rem,2.5vw,1.4rem)" : "1rem",
+                          color: "var(--ink)",
+                          lineHeight: 1.3,
+                        }}
+                      >
                         {p.title}
                       </p>
-                      {!p.isFree && (
-                        <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
-                          style={{ color: sc, border: `1px solid ${sc}44`, background: `${sc}15` }}>
-                          {p.collection.title}
-                        </span>
-                      )}
-                      {p.isFree && (
-                        <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
-                          style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}>
-                          Poème libre
-                        </span>
-                      )}
+
+                      {/* Meta */}
+                      <p className="font-ui text-xs mb-2" style={{ color: "var(--ink-light)" }}>
+                        {authorId ? (
+                          <span role="button" onClick={e => { e.stopPropagation(); goToAuthor(authorId); }} className="hover:underline">
+                            {authorName}
+                          </span>
+                        ) : authorName}
+                        {" · "}
+                        {timeAgo(dateRef)}
+                        {" · "}
+                        {!p.isFree && (
+                          <span style={{ color: sc }}>{p.collection.title}</span>
+                        )}
+                        {p.isFree && (
+                          <span style={{ color: "var(--ink-light)" }}>Poème libre</span>
+                        )}
+                      </p>
+
+                      {/* Preview */}
+                      <div
+                        className="font-display italic leading-relaxed"
+                        style={{
+                          fontSize: isFeatured ? "1rem" : "0.85rem",
+                          color: "var(--ink-light)",
+                          lineHeight: "1.8rem",
+                        }}
+                      >
+                        {preview.map((line, i) => <p key={i}>{line}</p>)}
+                        {(p.lines||[]).filter(l=>l.trim()).length > (isFeatured ? 4 : 2) && (
+                          <p style={{ opacity: 0.4, fontSize: 12, fontStyle: "normal", fontFamily: "Inter,sans-serif" }}>…</p>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Author + date */}
-                    <p className="font-ui text-xs mb-1.5" style={{ color: "var(--ink-light)" }}>
-                      {authorId ? (
-                        <span role="button" onClick={e => { e.stopPropagation(); goToAuthor(authorId); }} className="hover:underline">
-                          {authorName}
-                        </span>
-                      ) : authorName}
-                      {" · "}
-                      {timeAgo(dateRef)}
-                    </p>
-
-                    {/* Preview lines */}
-                    <div className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
-                      {preview.map((line, i) => <p key={i}>{line}</p>)}
+                    {/* Likes + gold ornament */}
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <div className="flex items-center gap-1" style={{ color: "var(--wine)" }}>
+                        <Heart size={isFeatured ? 14 : 11} fill={(p.likes_count || 0) > 0 ? "var(--wine)" : "none"} />
+                        <span className="font-mono text-xs">{p.likes_count || 0}</span>
+                      </div>
+                      {isFeatured && (
+                        <div style={{ width: 20, height: 1, background: `linear-gradient(to right, transparent, rgba(201,168,124,0.6))` }} />
+                      )}
                     </div>
-                  </div>
-
-                  {/* Likes */}
-                  <div className="flex items-center gap-1 shrink-0 mt-1" style={{ color: "var(--wine)" }}>
-                    <Heart size={12} fill={(p.likes_count || 0) > 0 ? "var(--wine)" : "none"} />
-                    <span className="font-mono text-xs">{p.likes_count || 0}</span>
                   </div>
                 </button>
               );
@@ -3537,6 +3581,130 @@ function CollabView({ session, profile, collections, openCollection, refresh }) 
   );
 }
 
+function CollectionsView({ collections, openCollection, goToAuthor }) {
+  const [query, setQuery] = useState("");
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? collections.filter(c =>
+        c.title.toLowerCase().includes(q) ||
+        c.author.toLowerCase().includes(q) ||
+        (c.theme || "").toLowerCase().includes(q)
+      )
+    : collections;
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-10 view-enter">
+      <div className="mb-8">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] mb-3" style={{ color: "var(--sage)" }}>
+          Bibliothèque
+        </p>
+        <h1 className="font-display italic mb-2" style={{ fontSize: "clamp(2rem,5vw,3rem)", color: "var(--ink)" }}>
+          Recueils
+        </h1>
+        <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+          {collections.length} recueil{collections.length === 1 ? "" : "s"} publiés
+        </p>
+      </div>
+
+      <div className="relative mb-8">
+        <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: "var(--ink-light)" }} />
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Chercher par titre, auteur ou thème..."
+          className="w-full font-ui text-sm pl-10 pr-4 py-3 rounded-full border bg-transparent outline-none"
+          style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+        />
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Aucun recueil ne correspond à « {query} ».</p>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filtered.map((c) => {
+            const sc = c.sealColor || colorFromString(c.title);
+            const totalLikes = (c.poems||[]).reduce((s,p) => s + (p.likes_count||0), 0);
+            const isNew = Date.now() - new Date(c.created_at).getTime() < 48 * 3600 * 1000;
+            const storedCount = parseInt(localStorage.getItem(`col_poems_${c.id}`) || "0", 10);
+            const hasNewPoem = !isNew && (c.poems||[]).length > storedCount && storedCount > 0;
+            const newPoemsCount = hasNewPoem ? (c.poems||[]).length - storedCount : 0;
+            return (
+              <button key={c.id}
+                onClick={() => { localStorage.setItem(`col_poems_${c.id}`, String((c.poems||[]).length)); openCollection(c, 0); }}
+                className="text-left group relative">
+                <div className="relative overflow-hidden transition-all duration-300"
+                  style={{ borderRadius: "3px 8px 8px 3px", boxShadow: "-3px 0 8px rgba(0,0,0,0.6), 4px 4px 24px rgba(0,0,0,0.5)" }}
+                  onMouseEnter={e => { e.currentTarget.style.transform="translateY(-5px)"; e.currentTarget.style.boxShadow="-3px 0 12px rgba(0,0,0,0.8),8px 10px 36px rgba(0,0,0,0.65)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="-3px 0 8px rgba(0,0,0,0.6),4px 4px 24px rgba(0,0,0,0.5)"; }}
+                >
+                  <div className="absolute left-0 top-0 bottom-0 z-10" style={{ width: 10, background: `linear-gradient(to bottom, ${sc}dd, ${sc}88)` }}>
+                    <div className="absolute left-[3px] top-3 bottom-3 w-px" style={{ background: "rgba(255,255,255,0.2)" }} />
+                  </div>
+                  <div className="relative pl-[10px]" style={{ height: 200 }}>
+                    {c.cover_url ? (
+                      <img src={c.cover_url} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ left: 10 }} />
+                    ) : (
+                      <div className="absolute inset-0" style={{ left: 10, background: `linear-gradient(160deg, #0F0E18 0%, ${sc}22 60%, #0F0E18 100%)` }} />
+                    )}
+                    <div className="absolute inset-0 z-[1]" style={{ left: 10, background: c.cover_url ? `linear-gradient(160deg,rgba(8,6,20,0.85) 0%,${sc}55 50%,rgba(5,4,15,0.92) 100%)` : `linear-gradient(160deg,rgba(8,6,20,0.6) 0%,transparent 60%,rgba(5,4,15,0.7) 100%)` }} />
+                    <svg className="absolute inset-0 w-full h-full z-[2] pointer-events-none" style={{ left: 10 }} viewBox="0 0 150 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+                      <ellipse cx="25" cy="30" rx="14" ry="6" fill={sc} opacity="0.45" transform="rotate(-30 25 30)"/>
+                      <ellipse cx="128" cy="22" rx="11" ry="4.5" fill={sc} opacity="0.3" transform="rotate(20 128 22)"/>
+                      <circle cx="118" cy="75" r="1.8" fill="#C9A87C" opacity="0.4"/>
+                    </svg>
+                    <div className="absolute z-[3]" style={{ top: 10, left: 20, right: 10 }}>
+                      <div style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(201,168,124,0.5), transparent)" }} />
+                    </div>
+                    <div className="absolute inset-0 z-[3] flex items-center justify-center" style={{ left: 10 }}>
+                      <span style={{ fontFamily: "'Fraunces',serif", fontStyle: "italic", fontSize: 64, fontWeight: 300, lineHeight: 1, color: sc, opacity: c.cover_url ? 0.3 : 0.55, textShadow: `0 0 24px ${sc}` }}>
+                        {c.seal}
+                      </span>
+                    </div>
+                    {c.is_collab && (
+                      <div className="absolute top-2 right-2 z-[4] flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: "rgba(201,168,124,0.12)", color: "#C9A87C", border: "1px solid rgba(201,168,124,0.3)" }}>
+                        <Crown size={8} /> Collab
+                      </div>
+                    )}
+                    {isNew && (
+                      <div className="absolute top-2 left-4 z-[4] px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: `${sc}33`, color: sc, border: `1px solid ${sc}55` }}>
+                        Nouveau
+                      </div>
+                    )}
+                    {!isNew && hasNewPoem && (
+                      <div className="absolute top-2 left-4 z-[4] flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: "rgba(139,58,74,0.35)", color: "#D08C9B", border: "1px solid rgba(139,58,74,0.5)" }}>
+                        <PenLine size={8} /> +{newPoemsCount}
+                      </div>
+                    )}
+                    <div className="absolute z-[3]" style={{ bottom: 52, left: 20, right: 10 }}>
+                      <div style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(201,168,124,0.3), transparent)" }} />
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 z-[4]" style={{ paddingLeft: 10 }}>
+                      <div className="relative px-3 pb-3 pt-2">
+                        <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent, rgba(5,4,16,0.95))" }} />
+                        <div className="relative">
+                          <p style={{ fontFamily: "'Fraunces',serif", fontStyle: "italic", fontSize: 13, color: "#F0E8D8", marginBottom: 2, lineHeight: 1.3 }}>{c.title}</p>
+                          <p style={{ fontSize: 10, color: "rgba(201,168,124,0.7)" }}>
+                            <span role="button" onClick={e => { e.stopPropagation(); if (c.author_id) goToAuthor(c.author_id); }} className={c.author_id ? "hover:underline" : ""}>
+                              {c.author}
+                            </span>
+                            {" · "}{c.theme} · {(c.poems||[]).length} poème{(c.poems||[]).length===1?"":"s"}{totalLikes > 0 ? ` · ❤ ${totalLikes}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="absolute right-0 top-0 bottom-0 z-[5]" style={{ width: 5, background: "repeating-linear-gradient(to bottom,#1E1A2B,#1E1A2B 2px,rgba(201,168,124,0.06) 2px,rgba(201,168,124,0.06) 3px)", borderRadius: "0 8px 8px 0" }} />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LibraryView({ session, profile, goToAuth }) {
   const [poems, setPoems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -4502,6 +4670,13 @@ export default function App() {
         />
 
         {view === "home" && <HomeView collections={collections} topLiked={topLiked} freePoems={freePoems} openCollection={openCollection} openFreePoem={openFreePoem} goToAuthor={goToAuthor} currentChallenge={currentChallenge} onChallenge={() => { setActiveChallenge(currentChallenge); setView("challenge"); }} />}
+        {view === "collections" && (
+          <CollectionsView
+            collections={collections}
+            openCollection={openCollection}
+            goToAuthor={goToAuthor}
+          />
+        )}
         {view === "library" && (
           <LibraryView
             session={session}
