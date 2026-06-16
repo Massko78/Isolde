@@ -437,7 +437,9 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
             ))}
           </p>
           <div className="flex items-center gap-3 mb-8">
-            <AuthorBadge avatarUrl={featured.authorAvatar} letter={featured.seal} color={featured.sealColor} />
+            <button onClick={() => featured.author_id && goToAuthor(featured.author_id)}>
+              <AuthorBadge avatarUrl={featured.authorAvatar} letter={featured.seal} color={featured.sealColor} />
+            </button>
             <div className="font-ui text-sm">
               <p style={{ color: "var(--ink)" }}>{featuredPoem.title}</p>
               <p style={{ color: "var(--ink-light)" }}>
@@ -482,7 +484,9 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
                   style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
                 >
                   <div className="flex items-center gap-4">
-                    <AuthorBadge avatarUrl={p.collection.authorAvatar} letter={p.collection.seal} color={p.collection.sealColor} />
+                    <button onClick={e => { e.stopPropagation(); if (p.collection.author_id) goToAuthor(p.collection.author_id); }}>
+                      <AuthorBadge avatarUrl={p.collection.authorAvatar} letter={p.collection.seal} color={p.collection.sealColor} />
+                    </button>
                     <div>
                       <h3 className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
                         {p.title}
@@ -955,7 +959,9 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
         {/* Table of contents */}
         <aside className="md:sticky md:top-24 self-start">
           <div className="flex items-center gap-3 mb-5">
-            <AuthorBadge avatarUrl={collection.authorAvatar} letter={collection.seal} color={collection.sealColor} size={32} />
+            <button onClick={() => collection.author_id && goToAuthor(collection.author_id)}>
+              <AuthorBadge avatarUrl={collection.authorAvatar} letter={collection.seal} color={collection.sealColor} size={32} />
+            </button>
             <div>
               <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>
                 {collection.isFree ? "Poème libre" : collection.title}
@@ -1218,12 +1224,14 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                 .map((c) => (
                   <div key={c.id} className="flex flex-col gap-3">
                     <div className="flex gap-3 group">
-                      <AuthorBadge
-                        avatarUrl={c.anonymous ? null : c.authorAvatar}
-                        letter={c.anonymous ? "?" : (c.author || "?").charAt(0).toUpperCase()}
-                        color={c.anonymous ? "var(--ink-light)" : colorFromString(c.author || "?")}
-                        size={28}
-                      />
+                      <button onClick={() => !c.anonymous && c.author_id && goToAuthor(c.author_id)}>
+                        <AuthorBadge
+                          avatarUrl={c.anonymous ? null : c.authorAvatar}
+                          letter={c.anonymous ? "?" : (c.author || "?").charAt(0).toUpperCase()}
+                          color={c.anonymous ? "var(--ink-light)" : colorFromString(c.author || "?")}
+                          size={28}
+                        />
+                      </button>
                       <div className="flex-1">
                         <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
                           {c.anonymous || !c.author_id ? (c.anonymous ? "Anonyme" : c.author) : (
@@ -1266,12 +1274,14 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                           .filter((r) => r.parent_id === c.id)
                           .map((r) => (
                             <div key={r.id} className="flex gap-3 group">
-                              <AuthorBadge
-                                avatarUrl={r.anonymous ? null : r.authorAvatar}
-                                letter={r.anonymous ? "?" : (r.author || "?").charAt(0).toUpperCase()}
-                                color={r.anonymous ? "var(--ink-light)" : colorFromString(r.author || "?")}
-                                size={24}
-                              />
+                              <button onClick={() => !r.anonymous && r.author_id && goToAuthor(r.author_id)}>
+                                <AuthorBadge
+                                  avatarUrl={r.anonymous ? null : r.authorAvatar}
+                                  letter={r.anonymous ? "?" : (r.author || "?").charAt(0).toUpperCase()}
+                                  color={r.anonymous ? "var(--ink-light)" : colorFromString(r.author || "?")}
+                                  size={24}
+                                />
+                              </button>
                               <div className="flex-1">
                                 <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
                                   {r.anonymous || !r.author_id ? (r.anonymous ? "Anonyme" : r.author) : (
@@ -2582,7 +2592,9 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
               style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
             >
               <div className="flex items-center gap-4">
-                <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
+                <button onClick={e => { e.stopPropagation(); if (c.author_id) goToAuthor(c.author_id); }}>
+                  <AuthorBadge avatarUrl={c.authorAvatar} letter={c.seal} color={c.sealColor} />
+                </button>
                 <div>
                   <p className="font-display italic text-lg" style={{ color: "var(--ink)" }}>
                     {c.title}
@@ -3478,7 +3490,7 @@ function ChallengeView({ session, profile, challenge, freePoems, collections, op
   );
 }
 
-function CollabView({ session, profile, collections, openCollection, refresh }) {
+function CollabView({ session, profile, collections, openCollection, refresh, goToAuthor }) {
   const [invites, setInvites] = useState(null);
   const [myCollabs, setMyCollabs] = useState([]);
   const [sentInvites, setSentInvites] = useState([]);
@@ -3655,8 +3667,10 @@ function CollabView({ session, profile, collections, openCollection, refresh }) 
 
               {partnerResult && partnerResult !== "none" && (
                 <div className="flex items-center gap-3 mt-3 p-3 rounded-lg" style={{ background: "var(--paper)" }}>
-                  <AuthorBadge avatarUrl={partnerResult.avatar_url} letter={partnerResult.username.charAt(0).toUpperCase()} color="var(--sage)" size={34} />
-                  <span className="font-display italic text-base flex-1" style={{ color: "var(--ink)" }}>{partnerResult.username}</span>
+                  <button onClick={() => partnerResult?.id && goToAuthor(partnerResult.id)}>
+                    <AuthorBadge avatarUrl={partnerResult.avatar_url} letter={partnerResult.username.charAt(0).toUpperCase()} color="var(--sage)" size={34} />
+                  </button>
+                  <button onClick={() => partnerResult?.id && goToAuthor(partnerResult.id)} className="font-display italic text-base flex-1 text-left hover:underline" style={{ color: "var(--ink)" }}>{partnerResult.username}</button>
                   <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-full" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>Trouvé</span>
                 </div>
               )}
@@ -3879,7 +3893,7 @@ function CollectionsView({ collections, openCollection, goToAuthor }) {
   );
 }
 
-function LibraryView({ session, profile, goToAuth }) {
+function LibraryView({ session, profile, goToAuth, goToAuthor }) {
   const [poems, setPoems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -4049,14 +4063,14 @@ function LibraryView({ session, profile, goToAuth }) {
                 <div key={c.id} className="flex flex-col gap-3">
                   {/* Main comment */}
                   <div className="flex gap-3 group">
-                    <div className="shrink-0 mt-0.5">
+                    <button className="shrink-0 mt-0.5" onClick={() => !c.anonymous && c.author_id && goToAuthor(c.author_id)}>
                       <AuthorBadge
                         avatarUrl={c.anonymous ? null : c.authorAvatar}
                         letter={(c.anonymous ? "?" : (c.author || "?").charAt(0)).toUpperCase()}
                         color={c.anonymous ? "var(--rule)" : colorFromString(c.author || "?")}
                         size={28}
                       />
-                    </div>
+                    </button>
                     <div className="flex-1">
                       <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
                         {c.anonymous ? "Anonyme" : c.author} · {timeAgo(c.created_at)}
@@ -4079,17 +4093,19 @@ function LibraryView({ session, profile, goToAuth }) {
                     <div className="flex flex-col gap-3 pl-10 border-l" style={{ borderColor: "var(--rule)" }}>
                       {comments.filter(r => r.parent_id === c.id).map(r => (
                         <div key={r.id} className="flex gap-3">
-                          <div className="shrink-0 mt-0.5">
+                          <button className="shrink-0 mt-0.5" onClick={() => !r.anonymous && r.author_id && goToAuthor(r.author_id)}>
                             <AuthorBadge
                               avatarUrl={r.anonymous ? null : r.authorAvatar}
                               letter={(r.anonymous ? "?" : (r.author || "?").charAt(0)).toUpperCase()}
                               color={r.anonymous ? "var(--rule)" : colorFromString(r.author || "?")}
                               size={24}
                             />
-                          </div>
+                          </button>
                           <div className="flex-1">
                             <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
-                              {r.anonymous ? "Anonyme" : r.author} · {timeAgo(r.created_at)}
+                              {r.anonymous ? "Anonyme" : (
+                                r.author_id ? <button onClick={() => goToAuthor(r.author_id)} className="hover:underline">{r.author}</button> : r.author
+                              )} · {timeAgo(r.created_at)}
                             </p>
                             <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>{r.content}</p>
                             {session && (
@@ -4473,7 +4489,7 @@ function ModerationView({ collections, freePoems, refresh }) {
                     <p className="font-display italic text-base mb-1" style={{ color: "var(--ink)" }}>
                       {poem.title}
                       <span className="font-ui text-xs not-italic ml-2" style={{ color: "var(--ink-light)" }}>
-                        {poem.collection ? <>— {poem.collection.title}, {poem.collection.author}</> : <>— Poème libre, {poem.author}</>}
+                        {poem.collection ? <>— {poem.collection.title}, <button onClick={() => poem.collection.author_id && goToAuthor(poem.collection.author_id)} className="hover:underline">{poem.collection.author}</button></> : <>— Poème libre, <button onClick={() => poem.author_id && goToAuthor(poem.author_id)} className="hover:underline">{poem.author}</button></>}
                       </span>
                     </p>
                   ) : (
@@ -4960,6 +4976,7 @@ export default function App() {
             session={session}
             profile={profile}
             goToAuth={() => setView("auth")}
+            goToAuthor={goToAuthor}
           />
         )}
         {view === "challenge" && activeChallenge && (
@@ -4982,6 +4999,7 @@ export default function App() {
             collections={collections}
             openCollection={openCollection}
             refresh={loadCollections}
+            goToAuthor={goToAuthor}
           />
         )}
         {view === "reader" && collection && (
