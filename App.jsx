@@ -1863,6 +1863,16 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [loadTimeout, setLoadTimeout] = useState(false);
+  const [followerCount, setFollowerCount] = useState(null);
+  const [followingCount, setFollowingCount] = useState(null);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    supabase.from("follows").select("id", { count: "exact", head: true }).eq("followed_id", session.user.id)
+      .then(({ count }) => setFollowerCount(count || 0));
+    supabase.from("follows").select("id", { count: "exact", head: true }).eq("follower_id", session.user.id)
+      .then(({ count }) => setFollowingCount(count || 0));
+  }, [session?.user?.id]);
 
   useEffect(() => {
     setUsername(profile?.username || "");
@@ -2010,6 +2020,16 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
               <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
                 {mine.reduce((s, c) => s + (c.poems||[]).reduce((ss, p) => ss + (p.likes_count||0), 0), 0) + myFreePoems.reduce((s, p) => s + (p.likes_count||0), 0)} like{mine.reduce((s,c)=>s+(c.poems||[]).reduce((ss,p)=>ss+(p.likes_count||0),0),0)+myFreePoems.reduce((s,p)=>s+(p.likes_count||0),0)===1?"":"s"} au total
               </span>
+              {followerCount !== null && (
+                <span className="font-mono text-xs font-semibold" style={{ color: "var(--wine)" }}>
+                  {followerCount} abonné{followerCount === 1 ? "" : "s"}
+                </span>
+              )}
+              {followingCount !== null && (
+                <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+                  {followingCount} abonnement{followingCount === 1 ? "" : "s"}
+                </span>
+              )}
             </div>
 
             {!editing && (
@@ -2356,33 +2376,24 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
   const [authorProfile, setAuthorProfile] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [followerCount, setFollowerCount] = useState(null);
+  const [followingCount, setFollowingCount] = useState(null);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", authorId)
-      .single()
-      .then(({ data }) => {
-        if (active) setAuthorProfile(data || null);
-      });
+    supabase.from("profiles").select("*").eq("id", authorId).single()
+      .then(({ data }) => { if (active) setAuthorProfile(data || null); });
     if (session) {
-      supabase
-        .from("follows")
-        .select("id")
-        .eq("follower_id", session.user.id)
-        .eq("followed_id", authorId)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (active) setIsFollowing(!!data);
-        });
+      supabase.from("follows").select("id").eq("follower_id", session.user.id).eq("followed_id", authorId).maybeSingle()
+        .then(({ data }) => { if (active) setIsFollowing(!!data); });
     }
+    supabase.from("follows").select("id", { count: "exact", head: true }).eq("followed_id", authorId)
+      .then(({ count }) => { if (active) setFollowerCount(count || 0); });
+    supabase.from("follows").select("id", { count: "exact", head: true }).eq("follower_id", authorId)
+      .then(({ count }) => { if (active) setFollowingCount(count || 0); });
     if (active) setLoading(false);
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [authorId, session]);
 
   const toggleFollow = async () => {
@@ -2390,9 +2401,11 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
     if (isFollowing) {
       await supabase.from("follows").delete().eq("follower_id", session.user.id).eq("followed_id", authorId);
       setIsFollowing(false);
+      setFollowerCount(c => Math.max(0, (c || 1) - 1));
     } else {
       await supabase.from("follows").insert({ follower_id: session.user.id, followed_id: authorId });
       setIsFollowing(true);
+      setFollowerCount(c => (c || 0) + 1);
     }
   };
 
@@ -2436,6 +2449,16 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
               <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>{authorCollections.length} recueil{authorCollections.length===1?"":"s"}</span>
               <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>{authorFreePoems.length} poème{authorFreePoems.length===1?"":"s"} libre{authorFreePoems.length===1?"":"s"}</span>
               <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>{totalLikes} like{totalLikes===1?"":"s"}</span>
+              {followerCount !== null && (
+                <span className="font-mono text-xs font-semibold" style={{ color: "var(--wine)" }}>
+                  {followerCount} abonné{followerCount === 1 ? "" : "s"}
+                </span>
+              )}
+              {followingCount !== null && (
+                <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+                  {followingCount} abonnement{followingCount === 1 ? "" : "s"}
+                </span>
+              )}
             </div>
             {authorProfile.bio && (
               <p className="font-display italic text-base leading-relaxed" style={{ color: "var(--ink)", opacity: 0.8, maxWidth: 420 }}>
@@ -2529,11 +2552,10 @@ function FollowingView({ session, collections, freePoems, openCollection, openFr
   const [followedIds, setFollowedIds] = useState(null);
   const [followedProfiles, setFollowedProfiles] = useState({});
 
+  const [followerCounts, setFollowerCounts] = useState({});
+
   const reload = async () => {
-    const { data } = await supabase
-      .from("follows")
-      .select("followed_id")
-      .eq("follower_id", session.user.id);
+    const { data } = await supabase.from("follows").select("followed_id").eq("follower_id", session.user.id);
     const ids = (data || []).map((f) => f.followed_id);
     setFollowedIds(ids);
     if (ids.length > 0) {
@@ -2543,6 +2565,20 @@ function FollowingView({ session, collections, freePoems, openCollection, openFr
       setFollowedProfiles(map);
     }
   };
+
+  // Fetch follower counts for leaderboard authors
+  useEffect(() => {
+    if (leaderboard.length === 0) return;
+    const ids = leaderboard.map(a => a.author_id);
+    Promise.all(ids.map(id =>
+      supabase.from("follows").select("id", { count: "exact", head: true }).eq("followed_id", id)
+        .then(({ count }) => ({ id, count: count || 0 }))
+    )).then(results => {
+      const map = {};
+      results.forEach(r => { map[r.id] = r.count; });
+      setFollowerCounts(map);
+    });
+  }, [leaderboard.map(a => a.author_id).join(",")]);
 
   useEffect(() => { reload(); }, [session.user.id]);
 
@@ -2596,6 +2632,9 @@ function FollowingView({ session, collections, freePoems, openCollection, openFr
                     </button>
                     <p className="font-ui text-xs" style={{ color: "var(--ink-light)" }}>
                       {a.collections} recueil{a.collections === 1 ? "" : "s"}
+                      {followerCounts[a.author_id] !== undefined && (
+                        <> · <span style={{ color: "var(--wine)" }}>{followerCounts[a.author_id]} abonné{followerCounts[a.author_id] === 1 ? "" : "s"}</span></>
+                      )}
                     </p>
                   </div>
                 </div>
