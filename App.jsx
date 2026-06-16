@@ -372,14 +372,17 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
   const featuredPoem = featured.poems[0];
   const excerptLines = featuredPoem.lines.filter((l) => l).slice(0, 3);
 
-  // Poems recently added to existing collections (last 7 days, not the whole collection being new)
-  const SEVEN_DAYS = 7 * 24 * 3600 * 1000;
-  const recentPoems = collections
-    .filter(c => Date.now() - new Date(c.created_at).getTime() > 48 * 3600 * 1000)
-    .flatMap(c => (c.poems || []).map(p => ({ ...p, collection: c })))
-    .filter(p => p.created_at && Date.now() - new Date(p.created_at).getTime() < SEVEN_DAYS)
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, 8);
+  // All poems (from collections + free), sorted by most recent
+  const allRecentPoems = [
+    ...collections.flatMap(c =>
+      (c.poems || []).map(p => ({ ...p, collection: c, isFree: false }))
+    ),
+    ...(freePoems || []).map(p => ({ ...p, collection: null, isFree: true })),
+  ].sort((a, b) => {
+    const dateA = a.created_at || a.collection?.updated_at || a.collection?.created_at || "1970";
+    const dateB = b.created_at || b.collection?.updated_at || b.collection?.created_at || "1970";
+    return new Date(dateB) - new Date(dateA);
+  }).slice(0, 20);
 
   return (
     <div className="max-w-5xl mx-auto px-6 view-enter">
@@ -513,61 +516,84 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
         </section>
       )}
 
-      {/* Recently added poems to existing collections */}
-      {recentPoems.length > 0 && (
+      {/* ── Fil des nouveaux poèmes ── */}
+      {allRecentPoems.length > 0 && (
         <section className="pb-14">
           <div className="flex items-center gap-3 mb-6">
             <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
               Nouveaux poèmes
             </h2>
             <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: "var(--wine)", color: "var(--paper-warm)" }}>
-              {recentPoems.length}
+              {allRecentPoems.length}
             </span>
           </div>
           <div className="flex flex-col gap-3">
-            {recentPoems.map((p) => {
+            {allRecentPoems.map((p) => {
               const preview = (p.lines || []).filter(l => l.trim()).slice(0, 2);
-              const sc = p.collection.sealColor || colorFromString(p.collection.title);
+              const sc = p.isFree
+                ? colorFromString(p.author || "?")
+                : (p.collection.sealColor || colorFromString(p.collection.title));
+
+              const authorName = p.isFree ? p.author : p.collection.author;
+              const authorId = p.isFree ? p.author_id : p.collection.author_id;
+              const dateRef = p.collection?.updated_at || p.collection?.created_at || p.created_at;
+
               return (
                 <button
-                  key={p.id}
-                  onClick={() => openCollection(p.collection, (p.collection.poems || []).findIndex(x => x.id === p.id))}
+                  key={`${p.isFree ? "free" : "col"}-${p.id}`}
+                  onClick={() => {
+                    if (p.isFree) openFreePoem(p);
+                    else openCollection(p.collection, (p.collection.poems || []).findIndex(x => x.id === p.id));
+                  }}
                   className="flex items-start gap-4 p-4 rounded-xl border text-left transition-all hover:shadow-md"
                   style={{ background: "var(--paper-warm)", borderColor: "var(--rule)", borderLeft: `3px solid ${sc}` }}
                 >
-                  {/* Collection badge */}
-                  <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center font-display italic text-sm" style={{ background: sc, color: "var(--paper-warm)" }}>
-                      {p.collection.seal}
-                    </div>
+                  {/* Avatar */}
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-display italic text-sm shrink-0 mt-0.5" style={{ background: sc, color: "var(--paper-warm)" }}>
+                    {p.isFree ? (p.author || "?").charAt(0).toUpperCase() : p.collection.seal}
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    {/* Title + collection badge */}
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                       <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>
                         {p.title}
                       </p>
-                      <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: sc, border: `1px solid ${sc}44`, background: `${sc}15` }}>
-                        {p.collection.title}
-                      </span>
-                    </div>
-                    <p className="font-ui text-xs mb-1" style={{ color: "var(--ink-light)" }}>
-                      {p.collection.author_id ? (
-                        <span role="button" onClick={e => { e.stopPropagation(); goToAuthor(p.collection.author_id); }} className="hover:underline">
-                          {p.collection.author}
+                      {!p.isFree && (
+                        <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
+                          style={{ color: sc, border: `1px solid ${sc}44`, background: `${sc}15` }}>
+                          {p.collection.title}
                         </span>
-                      ) : p.collection.author}
+                      )}
+                      {p.isFree && (
+                        <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
+                          style={{ color: "var(--ink-light)", border: "1px solid var(--rule)" }}>
+                          Poème libre
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Author + date */}
+                    <p className="font-ui text-xs mb-1.5" style={{ color: "var(--ink-light)" }}>
+                      {authorId ? (
+                        <span role="button" onClick={e => { e.stopPropagation(); goToAuthor(authorId); }} className="hover:underline">
+                          {authorName}
+                        </span>
+                      ) : authorName}
                       {" · "}
-                      {timeAgo(p.created_at)}
+                      {timeAgo(dateRef)}
                     </p>
+
+                    {/* Preview lines */}
                     <div className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
                       {preview.map((line, i) => <p key={i}>{line}</p>)}
                     </div>
                   </div>
 
+                  {/* Likes */}
                   <div className="flex items-center gap-1 shrink-0 mt-1" style={{ color: "var(--wine)" }}>
-                    <Heart size={12} fill={p.likes_count > 0 ? "var(--wine)" : "none"} />
-                    <span className="font-mono text-xs">{p.likes_count}</span>
+                    <Heart size={12} fill={(p.likes_count || 0) > 0 ? "var(--wine)" : "none"} />
+                    <span className="font-mono text-xs">{p.likes_count || 0}</span>
                   </div>
                 </button>
               );
@@ -576,268 +602,6 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
         </section>
       )}
 
-      {/* Collections grid */}
-      <section className="py-14">
-        <div className="flex items-baseline justify-between mb-6 gap-4 flex-wrap">
-          <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
-            Nouveaux recueils
-          </h2>
-          <p className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
-            {filtered.length} / {collections.length} publiés
-          </p>
-        </div>
-        <div className="relative mb-8">
-          <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: "var(--ink-light)" }} />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Chercher par titre, auteur ou thème..."
-            className="w-full font-ui text-sm pl-10 pr-4 py-3 rounded-full border bg-transparent outline-none focus:ring-1"
-            style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-          />
-        </div>
-        {filtered.length === 0 ? (
-          <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
-            Aucun recueil ne correspond à « {query} ».
-          </p>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filtered.map((c) => {
-              const spineColor = c.sealColor || colorFromString(c.title);
-              const totalLikes = (c.poems||[]).reduce((s,p) => s + (p.likes_count||0), 0);
-              const isNew = Date.now() - new Date(c.created_at).getTime() < 48 * 3600 * 1000;
-              const storedCount = parseInt(localStorage.getItem(`col_poems_${c.id}`) || "0", 10);
-              const hasNewPoem = !isNew && (c.poems||[]).length > storedCount && storedCount > 0;
-              const newPoemsCount = hasNewPoem ? (c.poems||[]).length - storedCount : 0;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => {
-                    localStorage.setItem(`col_poems_${c.id}`, String((c.poems||[]).length));
-                    openCollection(c, 0);
-                  }}
-                  className="text-left group relative"
-                >
-                  {/* Book shadow lift on hover */}
-                  <div
-                    className="relative overflow-hidden transition-all duration-300"
-                    style={{
-                      borderRadius: "3px 8px 8px 3px",
-                      boxShadow: `-3px 0 8px rgba(0,0,0,0.6), 4px 4px 24px rgba(0,0,0,0.5)`,
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.transform = "translateY(-5px)";
-                      e.currentTarget.style.boxShadow = `-3px 0 12px rgba(0,0,0,0.8), 8px 10px 36px rgba(0,0,0,0.65)`;
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.transform = "translateY(0)";
-                      e.currentTarget.style.boxShadow = `-3px 0 8px rgba(0,0,0,0.6), 4px 4px 24px rgba(0,0,0,0.5)`;
-                    }}
-                  >
-                    {/* Spine */}
-                    <div className="absolute left-0 top-0 bottom-0 z-10" style={{ width: 10, background: `linear-gradient(to bottom, ${spineColor}dd, ${spineColor}88)` }}>
-                      <div className="absolute left-[3px] top-3 bottom-3 w-px" style={{ background: "rgba(255,255,255,0.2)" }} />
-                    </div>
-
-                    {/* Cover area */}
-                    <div className="relative pl-[10px]" style={{ height: 220 }}>
-                      {/* Background — image or color */}
-                      {c.cover_url ? (
-                        <img src={c.cover_url} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ left: 10 }} />
-                      ) : (
-                        <div className="absolute inset-0" style={{ left: 10, background: `linear-gradient(160deg, #0F0E18 0%, ${spineColor}22 60%, #0F0E18 100%)` }} />
-                      )}
-
-                      {/* Overlay — always dark, tinted by spine color */}
-                      <div className="absolute inset-0 z-[1]" style={{
-                        left: 10,
-                        background: c.cover_url
-                          ? `linear-gradient(160deg, rgba(8,6,20,0.85) 0%, ${spineColor}55 50%, rgba(5,4,15,0.92) 100%)`
-                          : `linear-gradient(160deg, rgba(8,6,20,0.6) 0%, transparent 60%, rgba(5,4,15,0.7) 100%)`
-                      }} />
-
-                      {/* Petal SVG decorations */}
-                      <svg className="absolute inset-0 w-full h-full z-[2] pointer-events-none" style={{ left: 10 }} viewBox="0 0 150 220" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-                        <ellipse cx="25" cy="30" rx="14" ry="6" fill={spineColor} opacity="0.45" transform="rotate(-30 25 30)"/>
-                        <ellipse cx="128" cy="22" rx="11" ry="4.5" fill={spineColor} opacity="0.3" transform="rotate(20 128 22)"/>
-                        <ellipse cx="15" cy="160" rx="9" ry="3.5" fill={spineColor} opacity="0.25" transform="rotate(45 15 160)"/>
-                        <ellipse cx="135" cy="170" rx="13" ry="5" fill="#C9A87C" opacity="0.12" transform="rotate(-20 135 170)"/>
-                        <circle cx="118" cy="75" r="1.8" fill="#C9A87C" opacity="0.4"/>
-                        <circle cx="32" cy="110" r="1.3" fill="#C9A87C" opacity="0.3"/>
-                        <circle cx="95" cy="145" r="2" fill={spineColor} opacity="0.35"/>
-                      </svg>
-
-                      {/* Gold ornament top line */}
-                      <div className="absolute z-[3]" style={{ top: 10, left: 20, right: 10 }}>
-                        <div style={{ height: 1, background: `linear-gradient(to right, transparent, rgba(201,168,124,0.5), transparent)` }} />
-                      </div>
-
-                      {/* Big sigil */}
-                      <div className="absolute inset-0 z-[3] flex items-center justify-center" style={{ left: 10 }}>
-                        <span className="font-display italic" style={{
-                          fontSize: 72, fontWeight: 300, lineHeight: 1,
-                          color: spineColor,
-                          opacity: c.cover_url ? 0.35 : 0.6,
-                          textShadow: `0 0 24px ${spineColor}`,
-                          fontFamily: "'Fraunces', serif",
-                        }}>
-                          {c.seal}
-                        </span>
-                      </div>
-
-                      {/* Collab badge */}
-                      {c.is_collab && (
-                        <div className="absolute top-2 right-2 z-[4] flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: "rgba(201,168,124,0.12)", color: "#C9A87C", border: "1px solid rgba(201,168,124,0.3)" }}>
-                          <Crown size={8} /> Collab
-                        </div>
-                      )}
-
-                      {/* New badge */}
-                      {isNew && (
-                        <div className="absolute top-2 left-4 z-[4] px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: `${spineColor}33`, color: spineColor, border: `1px solid ${spineColor}55` }}>
-                          Nouveau
-                        </div>
-                      )}
-
-                      {/* New poems badge */}
-                      {!isNew && hasNewPoem && (
-                        <div className="absolute top-2 left-4 z-[4] flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: "rgba(139,58,74,0.35)", color: "#D08C9B", border: "1px solid rgba(139,58,74,0.5)" }}>
-                          <PenLine size={8} /> +{newPoemsCount} poème{newPoemsCount > 1 ? "s" : ""}
-                        </div>
-                      )}
-
-                      {/* Gold ornament bottom line */}
-                      <div className="absolute z-[3]" style={{ bottom: 52, left: 20, right: 10 }}>
-                        <div style={{ height: 1, background: `linear-gradient(to right, transparent, rgba(201,168,124,0.3), transparent)` }} />
-                      </div>
-
-                      {/* Footer */}
-                      <div className="absolute bottom-0 left-0 right-0 z-[4]" style={{ paddingLeft: 10 }}>
-                        <div className="relative px-3 pb-3 pt-2">
-                          <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent, rgba(5,4,16,0.95))` }} />
-                          <div className="relative">
-                            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                              <p className="font-display italic text-sm leading-tight" style={{ fontFamily: "'Fraunces', serif", color: "#F0E8D8" }}>
-                                {c.title}
-                              </p>
-                            </div>
-                            <p className="font-ui text-[10px]" style={{ color: "rgba(201,168,124,0.7)" }}>
-                              {c.author_id ? (
-                                <span role="button" onClick={(e) => { e.stopPropagation(); goToAuthor(c.author_id); }} className="hover:underline">
-                                  {c.author}
-                                </span>
-                              ) : c.author}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Page edge */}
-                      <div className="absolute right-0 top-0 bottom-0 z-[5]" style={{
-                        width: 5,
-                        background: "repeating-linear-gradient(to bottom, #1E1A2B, #1E1A2B 2px, rgba(201,168,124,0.06) 2px, rgba(201,168,124,0.06) 3px)",
-                        borderRadius: "0 8px 8px 0",
-                      }} />
-                    </div>
-                  </div>
-
-                  {/* Info below book */}
-                  <div className="flex items-center justify-between mt-2 px-1">
-                    <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "rgba(201,168,124,0.5)" }}>
-                      {c.theme}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px]" style={{ color: "var(--ink-light)" }}>
-                        {(c.poems||[]).length} poème{(c.poems||[]).length === 1 ? "" : "s"}
-                      </span>
-                      {totalLikes > 0 && (
-                        <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: "var(--wine)" }}>
-                          <Heart size={9} fill="var(--wine)" /> {totalLikes}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Free-standing poems */}
-      {freePoems.length > 0 && (
-        <section className="pb-14">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
-                Poèmes libres
-              </h2>
-              <span className="font-mono text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
-                {freePoems.length}
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-4">
-            {freePoems.map((p) => {
-              const isNew = Date.now() - new Date(p.updated_at || p.created_at).getTime() < 48 * 3600 * 1000;
-              const preview = p.lines.filter((l) => l.trim()).slice(0, 3);
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => openFreePoem(p)}
-                  className="text-left rounded-lg border transition-colors hover:shadow-md group"
-                  style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-                >
-                  <div className="flex items-start gap-4 p-5">
-                    <AuthorBadge avatarUrl={p.authorAvatar} letter={(p.author || "?").charAt(0).toUpperCase()} color="var(--wine)" size={36} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <p className="font-display italic text-xl" style={{ color: "var(--ink)" }}>
-                          {p.title}
-                        </p>
-                        {isNew && (
-                          <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: "var(--wine)", color: "var(--paper-warm)" }}>
-                            Nouveau
-                          </span>
-                        )}
-                        {p.challenge_id && (
-                          <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
-                            <Zap size={9} /> Challenge
-                          </span>
-                        )}
-                      </div>
-                      <p className="font-ui text-xs mb-3" style={{ color: "var(--ink-light)" }}>
-                        {p.author_id ? (
-                          <span role="button" onClick={(e) => { e.stopPropagation(); goToAuthor(p.author_id); }} className="hover:underline">
-                            {p.author}
-                          </span>
-                        ) : p.author}
-                        {" · "}
-                        {timeAgo(p.updated_at || p.created_at)}
-                      </p>
-                      <div className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
-                        {preview.map((line, i) => (
-                          <p key={i}>{line}</p>
-                        ))}
-                        {p.lines.filter((l) => l.trim()).length > 3 && (
-                          <p className="font-ui not-italic text-xs mt-1" style={{ color: "var(--ink-light)", opacity: 0.6 }}>
-                            Lire la suite →
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0 mt-1">
-                      <Heart size={12} fill={p.likes_count > 0 ? "var(--wine)" : "none"} stroke="var(--wine)" />
-                      <span className="font-mono text-xs" style={{ color: "var(--wine)" }}>{p.likes_count}</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
