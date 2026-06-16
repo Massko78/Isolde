@@ -900,13 +900,22 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
             </div>
           )}
 
-          <div
-            className="flex flex-col gap-[0.05em] font-display italic mb-12"
-            style={{ fontSize: "1.5rem", lineHeight: "2.4rem", color: "var(--ink)" }}
-          >
-            {poem.lines.map((line, i) => (
-              <span key={i}>{line || "\u00A0"}</span>
-            ))}
+          <div className="flex gap-3 sm:gap-6 mb-12">
+            <div className="flex flex-col gap-[0.05em] font-mono text-[10px] sm:text-[11px] pt-1 select-none shrink-0" style={{ color: "var(--rule)" }}>
+              {poem.lines.map((line, i) => (
+                <span key={i} style={{ visibility: line ? "visible" : "hidden", lineHeight: "clamp(1.8rem, 4.5vw, 2.4rem)" }}>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+              ))}
+            </div>
+            <div
+              className="flex flex-col gap-[0.05em] font-display italic pl-3 sm:pl-4 border-l min-w-0"
+              style={{ fontSize: "clamp(1.1rem, 4vw, 1.5rem)", lineHeight: "clamp(1.8rem, 4.5vw, 2.4rem)", color: "var(--ink)", borderColor: "var(--rule)" }}
+            >
+              {poem.lines.map((line, i) => (
+                <span key={i} className="break-words">{line || "\u00A0"}</span>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center justify-between pt-6 border-t" style={{ borderColor: "var(--rule)" }}>
@@ -1068,20 +1077,20 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
             </div>
           )}
 
-          <div className="flex gap-5 mb-10">
-            <div className="flex flex-col gap-[0.05em] font-mono text-[11px] pt-1 select-none" style={{ color: "var(--rule)" }}>
+          <div className="flex gap-3 sm:gap-5 mb-10">
+            <div className="flex flex-col gap-[0.05em] font-mono text-[10px] sm:text-[11px] pt-1 select-none shrink-0" style={{ color: "var(--rule)" }}>
               {poem.lines.map((line, i) => (
-                <span key={i} style={{ visibility: line ? "visible" : "hidden", lineHeight: "2rem" }}>
+                <span key={i} style={{ visibility: line ? "visible" : "hidden", lineHeight: "clamp(1.6rem, 4vw, 2rem)" }}>
                   {String(i + 1).padStart(2, "0")}
                 </span>
               ))}
             </div>
             <div
-              className="flex flex-col gap-[0.05em] font-display italic pl-5 border-l"
-              style={{ fontSize: "1.35rem", lineHeight: "2rem", color: "var(--ink)", borderColor: "var(--rule)" }}
+              className="flex flex-col gap-[0.05em] font-display italic pl-3 sm:pl-5 border-l min-w-0"
+              style={{ fontSize: "clamp(1rem, 3.5vw, 1.35rem)", lineHeight: "clamp(1.6rem, 4vw, 2rem)", color: "var(--ink)", borderColor: "var(--rule)" }}
             >
               {poem.lines.map((line, i) => (
-                <span key={i}>{line || "\u00A0"}</span>
+                <span key={i} className="break-words">{line || "\u00A0"}</span>
               ))}
             </div>
           </div>
