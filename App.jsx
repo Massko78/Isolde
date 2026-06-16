@@ -1874,6 +1874,9 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
   const [loadTimeout, setLoadTimeout] = useState(false);
   const [followerCount, setFollowerCount] = useState(null);
   const [followingCount, setFollowingCount] = useState(null);
+  const [showFollowers, setShowFollowers] = useState(null); // "followers" | "following" | null
+  const [followersList, setFollowersList] = useState([]);
+  const [followingList, setFollowingList] = useState([]);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -1981,6 +1984,26 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
 
   const spineColor = (c) => c.sealColor || colorFromString(c.title);
 
+  const openFollowPanel = async (type) => {
+    setShowFollowers(type);
+    if (type === "followers" && followersList.length === 0) {
+      const { data } = await supabase.from("follows").select("follower_id").eq("followed_id", session.user.id);
+      const ids = (data || []).map(r => r.follower_id);
+      if (ids.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", ids);
+        setFollowersList(profs || []);
+      }
+    }
+    if (type === "following" && followingList.length === 0) {
+      const { data } = await supabase.from("follows").select("followed_id").eq("follower_id", session.user.id);
+      const ids = (data || []).map(r => r.followed_id);
+      if (ids.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", ids);
+        setFollowingList(profs || []);
+      }
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-6 pb-16 view-enter">
 
@@ -2030,14 +2053,14 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
                 {mine.reduce((s, c) => s + (c.poems||[]).reduce((ss, p) => ss + (p.likes_count||0), 0), 0) + myFreePoems.reduce((s, p) => s + (p.likes_count||0), 0)} like{mine.reduce((s,c)=>s+(c.poems||[]).reduce((ss,p)=>ss+(p.likes_count||0),0),0)+myFreePoems.reduce((s,p)=>s+(p.likes_count||0),0)===1?"":"s"} au total
               </span>
               {followerCount !== null && (
-                <span className="font-mono text-xs font-semibold" style={{ color: "var(--wine)" }}>
+                <button onClick={() => openFollowPanel("followers")} className="font-mono text-xs font-semibold hover:underline" style={{ color: "var(--wine)" }}>
                   {followerCount} abonné{followerCount === 1 ? "" : "s"}
-                </span>
+                </button>
               )}
               {followingCount !== null && (
-                <span className="font-mono text-xs" style={{ color: "var(--ink-light)" }}>
+                <button onClick={() => openFollowPanel("following")} className="font-mono text-xs hover:underline" style={{ color: "var(--ink-light)" }}>
                   {followingCount} abonnement{followingCount === 1 ? "" : "s"}
-                </span>
+                </button>
               )}
             </div>
 
@@ -2221,6 +2244,56 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
           <button onClick={onWrite} className="font-ui text-sm px-6 py-3 rounded-full" style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
             Écrire quelque chose
           </button>
+        </div>
+      )}
+
+      {/* Followers / Following overlay panel */}
+      {showFollowers && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }} onClick={() => setShowFollowers(null)}>
+          <div className="w-full max-w-sm rounded-2xl overflow-hidden" style={{ background: "var(--paper-warm)" }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--rule)" }}>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => openFollowPanel("followers")}
+                  className="font-display italic text-lg transition-opacity"
+                  style={{ color: showFollowers === "followers" ? "var(--ink)" : "var(--ink-light)", opacity: showFollowers === "followers" ? 1 : 0.5 }}
+                >
+                  {followerCount} abonné{followerCount === 1 ? "" : "s"}
+                </button>
+                <button
+                  onClick={() => openFollowPanel("following")}
+                  className="font-display italic text-lg transition-opacity"
+                  style={{ color: showFollowers === "following" ? "var(--ink)" : "var(--ink-light)", opacity: showFollowers === "following" ? 1 : 0.5 }}
+                >
+                  {followingCount} abonnement{followingCount === 1 ? "" : "s"}
+                </button>
+              </div>
+              <button onClick={() => setShowFollowers(null)} style={{ color: "var(--ink-light)" }}>
+                <X size={18} />
+              </button>
+            </div>
+            {/* List */}
+            <div className="overflow-y-auto" style={{ maxHeight: 360 }}>
+              {(showFollowers === "followers" ? followersList : followingList).length === 0 ? (
+                <p className="font-ui text-sm px-5 py-6" style={{ color: "var(--ink-light)" }}>
+                  {showFollowers === "followers" ? "Aucun abonné pour l'instant." : "Tu ne suis personne."}
+                </p>
+              ) : (
+                (showFollowers === "followers" ? followersList : followingList).map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => { setShowFollowers(null); /* goToAuthor handled by parent */ }}
+                    className="flex items-center gap-3 w-full px-5 py-3 border-b text-left transition-colors hover:opacity-80"
+                    style={{ borderColor: "var(--rule)" }}
+                  >
+                    <AuthorBadge avatarUrl={p.avatar_url} letter={p.username.charAt(0).toUpperCase()} color={colorFromString(p.username)} size={38} />
+                    <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>{p.username}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2666,6 +2739,46 @@ function FollowingView({ session, collections, freePoems, openCollection, openFr
           </div>
         )}
       </section>
+
+      {/* Personnes suivies */}
+      {followedIds !== null && (
+        <section className="mb-14">
+          <div className="flex items-center gap-2 mb-5">
+            <Users size={16} style={{ color: "var(--sage)" }} />
+            <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+              Tu suis
+            </h2>
+            <span className="font-mono text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--rule)", color: "var(--ink-light)" }}>
+              {followedIds.length}
+            </span>
+          </div>
+          {followedIds.length === 0 ? (
+            <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>
+              Tu ne suis encore personne.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {followedIds.map(id => {
+                const p = followedProfiles[id];
+                if (!p) return null;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => goToAuthor(id)}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm"
+                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
+                  >
+                    <AuthorBadge avatarUrl={p.avatar_url} letter={p.username.charAt(0).toUpperCase()} color={colorFromString(p.username)} size={36} />
+                    <div className="text-left">
+                      <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>{p.username}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Feed */}
       <section>
