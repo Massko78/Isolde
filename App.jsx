@@ -2905,7 +2905,7 @@ function FollowingView({ session, collections, freePoems, openCollection, openFr
   );
 }
 
-function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoem, onLoad }) {
+function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoem, onLoad, goToLibrary }) {
   const [events, setEvents] = useState(null);
 
   const myPoems = [
@@ -2979,7 +2979,40 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
         }));
       }
 
-      // 4. New followers
+      // 4. Replies on my classic_comments (Inspiration)
+      const { data: myClassicComments } = await supabase.from("classic_comments").select("id, poem_id").eq("author_id", session.user.id);
+      const myClassicIds = (myClassicComments || []).map(c => c.id);
+      if (myClassicIds.length > 0) {
+        const { data: classicReplies } = await supabase.from("classic_comments")
+          .select("*")
+          .in("parent_id", myClassicIds)
+          .neq("author_id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(20);
+        const crIds = [...new Set((classicReplies||[]).map(r => r.author_id).filter(Boolean))];
+        let crMap = {};
+        if (crIds.length > 0) {
+          const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", crIds);
+          (profs || []).forEach(p => { crMap[p.id] = p; });
+        }
+        // Get poem titles for classic poems
+        const classicPoemIds = [...new Set((classicReplies||[]).map(r => r.poem_id).filter(Boolean))];
+        let classicPoems = {};
+        if (classicPoemIds.length > 0) {
+          const { data: cp } = await supabase.from("classic_poems").select("id, title, author").in("id", classicPoemIds);
+          (cp || []).forEach(p => { classicPoems[p.id] = p; });
+        }
+        (classicReplies || []).forEach(r => allEvents.push({
+          type: "classic_reply", date: r.created_at, id: `classic-reply-${r.id}`,
+          author: r.author, author_id: r.author_id,
+          authorAvatar: r.author_id ? crMap[r.author_id]?.avatar_url : null,
+          authorProfile: r.author_id ? crMap[r.author_id] : null,
+          anonymous: r.anonymous, content: r.content,
+          classicPoem: classicPoems[r.poem_id] || null,
+        }));
+      }
+
+      // 5. New followers
       const { data: followRows } = await supabase.from("follows").select("follower_id, created_at").eq("followed_id", session.user.id).order("created_at", { ascending: false }).limit(30);
       const followList = followRows || [];
       const fIds = [...new Set(followList.map(f => f.follower_id))];
@@ -3005,6 +3038,7 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
     like: <Heart size={13} fill="var(--wine)" stroke="var(--wine)" />,
     comment: <MessageCircle size={13} style={{ color: "var(--sage)" }} />,
     reply: <MessageCircle size={13} style={{ color: "var(--ink-light)" }} />,
+    classic_reply: <MessageCircle size={13} style={{ color: "var(--sage)", opacity: 0.7 }} />,
     follow: <UserPlus size={13} style={{ color: "var(--sage)" }} />,
   };
 
@@ -3012,6 +3046,7 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
     like: (e) => <>a aimé <span className="font-display italic">« {findPoemTitle(e.poem_id)} »</span></>,
     comment: (e) => <>a commenté <span className="font-display italic">« {findPoemTitle(e.poem_id)} »</span></>,
     reply: (e) => <>a répondu à ton commentaire</>,
+    classic_reply: (e) => <>a répondu dans Inspiration{e.classicPoem ? <> · <span className="font-display italic">« {e.classicPoem.title} »</span></> : ""}</>,
     follow: (e) => <>a commencé à te suivre</>,
   };
 
@@ -3034,6 +3069,7 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
             const name = e.anonymous ? "Anonyme" : (profile?.username || e.author || "Quelqu'un");
             const avatar = e.anonymous ? null : (profile?.avatar_url || e.authorAvatar);
             const isClickable = e.type === "like" || e.type === "comment" || e.type === "reply";
+            const isClassicReply = e.type === "classic_reply";
 
             const content = (
               <div className={`flex items-start gap-3 py-4 ${idx < events.length - 1 ? "border-b" : ""}`} style={{ borderColor: "var(--rule)" }}>
@@ -3082,6 +3118,15 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
                       style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
                     >
                       Voir
+                    </button>
+                  )}
+                  {isClassicReply && goToLibrary && (
+                    <button
+                      onClick={() => goToLibrary(e.classicPoem)}
+                      className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border transition-opacity hover:opacity-70"
+                      style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
+                    >
+                      Inspiration
                     </button>
                   )}
                 </div>
@@ -3928,13 +3973,13 @@ function CollectionsView({ collections, openCollection, goToAuthor }) {
   );
 }
 
-function LibraryView({ session, profile, goToAuth, goToAuthor }) {
+function LibraryView({ session, profile, goToAuth, goToAuthor, initialPoem, onClearInitialPoem }) {
   const [poems, setPoems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [selectedTheme, setSelectedTheme] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
-  const [openPoem, setOpenPoem] = useState(null);
+  const [openPoem, setOpenPoem] = useState(initialPoem || null);
   const [comments, setComments] = useState([]);
   const [commentDraft, setCommentDraft] = useState("");
   const [commentAnon, setCommentAnon] = useState(false);
@@ -4039,7 +4084,7 @@ function LibraryView({ session, profile, goToAuth, goToAuthor }) {
 
     return (
       <div className="max-w-3xl mx-auto px-6 py-10 view-enter">
-        <button onClick={() => setOpenPoem(null)} className="flex items-center gap-2 font-ui text-sm mb-8 hover:opacity-70 transition-opacity" style={{ color: "var(--ink-light)" }}>
+        <button onClick={() => { setOpenPoem(null); if (onClearInitialPoem) onClearInitialPoem(); }} className="flex items-center gap-2 font-ui text-sm mb-8 hover:opacity-70 transition-opacity" style={{ color: "var(--ink-light)" }}>
           <ArrowLeft size={15} /> Bibliothèque
         </button>
 
@@ -4790,6 +4835,18 @@ export default function App() {
       interactionCount += replyCount || 0;
     }
 
+    // Replies to my classic_comments (Inspiration)
+    const { data: myClassicComments } = await supabase.from("classic_comments").select("id").eq("author_id", uid);
+    const myClassicCommentIds = (myClassicComments || []).map(c => c.id);
+    if (myClassicCommentIds.length > 0) {
+      const { count: classicReplyCount } = await supabase.from("classic_comments")
+        .select("id", { count: "exact", head: true })
+        .in("parent_id", myClassicCommentIds)
+        .neq("author_id", uid)
+        .gt("created_at", lastInteractionSeen);
+      interactionCount += classicReplyCount || 0;
+    }
+
     // New followers
     const { count: followCount } = await supabase.from("follows")
       .select("id", { count: "exact", head: true })
@@ -4896,6 +4953,12 @@ export default function App() {
     }
     const freePoem = freePoems.find((p) => p.id === poemId);
     if (freePoem) openFreePoem(freePoem);
+  };
+
+  const [libraryPoem, setLibraryPoem] = useState(null);
+  const goToLibrary = (poem) => {
+    setLibraryPoem(poem);
+    setView("library");
   };
 
   const editDraft = (draft) => {
@@ -5012,6 +5075,8 @@ export default function App() {
             profile={profile}
             goToAuth={() => setView("auth")}
             goToAuthor={goToAuthor}
+            initialPoem={libraryPoem}
+            onClearInitialPoem={() => setLibraryPoem(null)}
           />
         )}
         {view === "challenge" && activeChallenge && (
@@ -5127,6 +5192,7 @@ export default function App() {
             freePoems={freePoems}
             goToAuthor={goToAuthor}
             goToPoem={goToPoem}
+            goToLibrary={goToLibrary}
             onLoad={() => {
               localStorage.setItem(`last_interaction_seen_${session.user.id}`, new Date().toISOString());
               setNotifCount(0);
