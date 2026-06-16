@@ -2575,20 +2575,6 @@ function FollowingView({ session, collections, freePoems, openCollection, openFr
     }
   };
 
-  // Fetch follower counts for leaderboard authors
-  useEffect(() => {
-    if (leaderboard.length === 0) return;
-    const ids = leaderboard.map(a => a.author_id);
-    Promise.all(ids.map(id =>
-      supabase.from("follows").select("id", { count: "exact", head: true }).eq("followed_id", id)
-        .then(({ count }) => ({ id, count: count || 0 }))
-    )).then(results => {
-      const map = {};
-      results.forEach(r => { map[r.id] = r.count; });
-      setFollowerCounts(map);
-    });
-  }, [leaderboard.map(a => a.author_id).join(",")]);
-
   useEffect(() => { reload(); }, [session.user.id]);
 
   // Leaderboard
@@ -2601,6 +2587,20 @@ function FollowingView({ session, collections, freePoems, openCollection, openFr
     authorStats[c.author_id].collections += 1;
   });
   const leaderboard = Object.values(authorStats).sort((a, b) => b.likes - a.likes).slice(0, 5);
+
+  // Fetch follower counts for leaderboard — safe, runs after leaderboard is computed
+  useEffect(() => {
+    if (leaderboard.length === 0) return;
+    const ids = leaderboard.map(a => a.author_id);
+    Promise.all(ids.map(id =>
+      supabase.from("follows").select("id", { count: "exact", head: true }).eq("followed_id", id)
+        .then(({ count }) => ({ id, count: count || 0 }))
+    )).then(results => {
+      const map = {};
+      results.forEach(r => { map[r.id] = r.count; });
+      setFollowerCounts(map);
+    });
+  }, [collections.length]);
 
   // Feed of followed authors — collections + free poems sorted by date
   const feed = followedIds === null ? null : [
