@@ -3912,8 +3912,15 @@ function LibraryView({ session, profile, goToAuth }) {
 
   useEffect(() => {
     if (!openPoem) return;
-    supabase.from("classic_comments").select("*").eq("poem_id", openPoem.id).order("created_at", { ascending: true }).then(({ data }) => {
-      setComments(data || []);
+    supabase.from("classic_comments").select("*").eq("poem_id", openPoem.id).order("created_at", { ascending: true }).then(async ({ data }) => {
+      const rows = data || [];
+      const authorIds = [...new Set(rows.map(c => c.author_id).filter(Boolean))];
+      let avatarMap = {};
+      if (authorIds.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, avatar_url").in("id", authorIds);
+        (profs || []).forEach(p => { avatarMap[p.id] = p.avatar_url; });
+      }
+      setComments(rows.map(c => ({ ...c, authorAvatar: c.author_id ? avatarMap[c.author_id] : null })));
     });
   }, [openPoem?.id]);
 
@@ -3947,7 +3954,7 @@ function LibraryView({ session, profile, goToAuth }) {
       content: content.trim(),
     }).select().single();
     if (data) {
-      setComments(prev => [...prev, data]);
+      setComments(prev => [...prev, { ...data, authorAvatar: commentAnon ? null : profile?.avatar_url }]);
       if (parentId) { setReplyingTo(null); setReplyDraft(""); }
       else setCommentDraft("");
     }
@@ -4042,8 +4049,13 @@ function LibraryView({ session, profile, goToAuth }) {
                 <div key={c.id} className="flex flex-col gap-3">
                   {/* Main comment */}
                   <div className="flex gap-3 group">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center font-display italic text-xs shrink-0 mt-0.5" style={{ background: c.anonymous ? "var(--rule)" : colorFromString(c.author || "?"), color: "var(--paper-warm)" }}>
-                      {c.anonymous ? "?" : (c.author || "?").charAt(0).toUpperCase()}
+                    <div className="shrink-0 mt-0.5">
+                      <AuthorBadge
+                        avatarUrl={c.anonymous ? null : c.authorAvatar}
+                        letter={(c.anonymous ? "?" : (c.author || "?").charAt(0)).toUpperCase()}
+                        color={c.anonymous ? "var(--rule)" : colorFromString(c.author || "?")}
+                        size={28}
+                      />
                     </div>
                     <div className="flex-1">
                       <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
@@ -4067,8 +4079,13 @@ function LibraryView({ session, profile, goToAuth }) {
                     <div className="flex flex-col gap-3 pl-10 border-l" style={{ borderColor: "var(--rule)" }}>
                       {comments.filter(r => r.parent_id === c.id).map(r => (
                         <div key={r.id} className="flex gap-3">
-                          <div className="w-6 h-6 rounded-full flex items-center justify-center font-display italic text-[10px] shrink-0 mt-0.5" style={{ background: r.anonymous ? "var(--rule)" : colorFromString(r.author || "?"), color: "var(--paper-warm)" }}>
-                            {r.anonymous ? "?" : (r.author || "?").charAt(0).toUpperCase()}
+                          <div className="shrink-0 mt-0.5">
+                            <AuthorBadge
+                              avatarUrl={r.anonymous ? null : r.authorAvatar}
+                              letter={(r.anonymous ? "?" : (r.author || "?").charAt(0)).toUpperCase()}
+                              color={r.anonymous ? "var(--rule)" : colorFromString(r.author || "?")}
+                              size={24}
+                            />
                           </div>
                           <div className="flex-1">
                             <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
