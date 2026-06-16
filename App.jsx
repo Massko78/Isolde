@@ -2859,9 +2859,7 @@ function FollowingView({ session, collections, freePoems, openCollection, openFr
 }
 
 function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoem, onLoad }) {
-  const [likes, setLikes] = useState(null);
-  const [comments, setComments] = useState(null);
-  const [replies, setReplies] = useState(null);
+  const [events, setEvents] = useState(null);
 
   const myPoems = [
     ...collections.filter((c) => c.author_id === session.user.id).flatMap((c) => c.poems),
@@ -2881,235 +2879,170 @@ function InteractionsView({ session, collections, freePoems, goToAuthor, goToPoe
   useEffect(() => {
     let active = true;
     const load = async () => {
-      // Likes received on my poems
+      const allEvents = [];
+
+      // 1. Likes on my poems
       if (myPoemIds.length > 0) {
-        const { data: likeRows } = await supabase
-          .from("likes")
-          .select("*")
-          .in("poem_id", myPoemIds)
-          .neq("voter_id", session.user.id)
-          .order("created_at", { ascending: false })
-          .limit(40);
+        const { data: likeRows } = await supabase.from("likes").select("*").in("poem_id", myPoemIds).neq("voter_id", session.user.id).order("created_at", { ascending: false }).limit(50);
         const likeList = likeRows || [];
-        const userIds = [...new Set(likeList.map((l) => l.voter_id).filter((id) => !id.startsWith("anon-")))];
+        const userIds = [...new Set(likeList.map(l => l.voter_id).filter(id => !id.startsWith("anon-")))];
         let profMap = {};
         if (userIds.length > 0) {
           const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
-          (profs || []).forEach((p) => { profMap[p.id] = p; });
+          (profs || []).forEach(p => { profMap[p.id] = p; });
         }
-        if (active) setLikes(likeList.map((l) => ({ ...l, voterProfile: profMap[l.voter_id] || null })));
+        likeList.forEach(l => allEvents.push({
+          type: "like", date: l.created_at, id: `like-${l.id}`,
+          voterProfile: profMap[l.voter_id] || null, voter_id: l.voter_id,
+          poem_id: l.poem_id,
+        }));
 
-        // Comments received on my poems
-        const { data: commentRows } = await supabase
-          .from("comments")
-          .select("*")
-          .in("poem_id", myPoemIds)
-          .is("parent_id", null)
-          .order("created_at", { ascending: false })
-          .limit(40);
-        const commentList = (commentRows || []).filter((c) => c.author_id !== session.user.id);
-        const cAuthorIds = [...new Set(commentList.map((c) => c.author_id).filter(Boolean))];
+        // 2. Comments on my poems
+        const { data: commentRows } = await supabase.from("comments").select("*").in("poem_id", myPoemIds).is("parent_id", null).order("created_at", { ascending: false }).limit(50);
+        const commentList = (commentRows || []).filter(c => c.author_id !== session.user.id);
+        const cIds = [...new Set(commentList.map(c => c.author_id).filter(Boolean))];
         let avatarMap = {};
-        if (cAuthorIds.length > 0) {
-          const { data: profs } = await supabase.from("profiles").select("id, avatar_url").in("id", cAuthorIds);
-          (profs || []).forEach((p) => { avatarMap[p.id] = p.avatar_url; });
+        if (cIds.length > 0) {
+          const { data: profs } = await supabase.from("profiles").select("id, avatar_url").in("id", cIds);
+          (profs || []).forEach(p => { avatarMap[p.id] = p.avatar_url; });
         }
-        if (active) setComments(commentList.map((c) => ({ ...c, authorAvatar: c.author_id ? avatarMap[c.author_id] : null })));
-      } else {
-        if (active) { setLikes([]); setComments([]); }
+        commentList.forEach(c => allEvents.push({
+          type: "comment", date: c.created_at, id: `comment-${c.id}`,
+          author: c.author, author_id: c.author_id, authorAvatar: c.author_id ? avatarMap[c.author_id] : null,
+          anonymous: c.anonymous, content: c.content, poem_id: c.poem_id,
+        }));
       }
 
-      // Replies to my comments
-      const { data: myCommentRows } = await supabase.from("comments").select("id, poem_id").eq("author_id", session.user.id);
-      const myCommentIds = (myCommentRows || []).map((c) => c.id);
+      // 3. Replies to my comments
+      const { data: myCommentRows } = await supabase.from("comments").select("id").eq("author_id", session.user.id);
+      const myCommentIds = (myCommentRows || []).map(c => c.id);
       if (myCommentIds.length > 0) {
-        const { data: replyRows } = await supabase
-          .from("comments")
-          .select("*")
-          .in("parent_id", myCommentIds)
-          .order("created_at", { ascending: false })
-          .limit(40);
-        const replyList = (replyRows || []).filter((r) => r.author_id !== session.user.id);
-        const rAuthorIds = [...new Set(replyList.map((c) => c.author_id).filter(Boolean))];
+        const { data: replyRows } = await supabase.from("comments").select("*").in("parent_id", myCommentIds).order("created_at", { ascending: false }).limit(30);
+        const replyList = (replyRows || []).filter(r => r.author_id !== session.user.id);
+        const rIds = [...new Set(replyList.map(c => c.author_id).filter(Boolean))];
         let avatarMap2 = {};
-        if (rAuthorIds.length > 0) {
-          const { data: profs } = await supabase.from("profiles").select("id, avatar_url").in("id", rAuthorIds);
-          (profs || []).forEach((p) => { avatarMap2[p.id] = p.avatar_url; });
+        if (rIds.length > 0) {
+          const { data: profs } = await supabase.from("profiles").select("id, avatar_url").in("id", rIds);
+          (profs || []).forEach(p => { avatarMap2[p.id] = p.avatar_url; });
         }
-        if (active) setReplies(replyList.map((c) => ({ ...c, authorAvatar: c.author_id ? avatarMap2[c.author_id] : null })));
-      } else {
-        if (active) setReplies([]);
+        replyList.forEach(r => allEvents.push({
+          type: "reply", date: r.created_at, id: `reply-${r.id}`,
+          author: r.author, author_id: r.author_id, authorAvatar: r.author_id ? avatarMap2[r.author_id] : null,
+          anonymous: r.anonymous, content: r.content, poem_id: r.poem_id,
+        }));
       }
-      if (active && onLoad) onLoad();
+
+      // 4. New followers
+      const { data: followRows } = await supabase.from("follows").select("follower_id, created_at").eq("followed_id", session.user.id).order("created_at", { ascending: false }).limit(30);
+      const followList = followRows || [];
+      const fIds = [...new Set(followList.map(f => f.follower_id))];
+      let fProfMap = {};
+      if (fIds.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", fIds);
+        (profs || []).forEach(p => { fProfMap[p.id] = p; });
+      }
+      followList.forEach(f => allEvents.push({
+        type: "follow", date: f.created_at, id: `follow-${f.follower_id}`,
+        followerProfile: fProfMap[f.follower_id] || null, follower_id: f.follower_id,
+      }));
+
+      // Sort everything by date desc
+      allEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+      if (active) { setEvents(allEvents); if (onLoad) onLoad(); }
     };
     load();
     return () => { active = false; };
   }, [session.user.id]);
 
-  const loading = likes === null || comments === null || replies === null;
-  const totalUnseen = (likes?.length || 0) + (comments?.length || 0) + (replies?.length || 0);
+  const ICONS = {
+    like: <Heart size={13} fill="var(--wine)" stroke="var(--wine)" />,
+    comment: <MessageCircle size={13} style={{ color: "var(--sage)" }} />,
+    reply: <MessageCircle size={13} style={{ color: "var(--ink-light)" }} />,
+    follow: <UserPlus size={13} style={{ color: "var(--sage)" }} />,
+  };
+
+  const LABEL = {
+    like: (e) => <>a aimé <span className="font-display italic">« {findPoemTitle(e.poem_id)} »</span></>,
+    comment: (e) => <>a commenté <span className="font-display italic">« {findPoemTitle(e.poem_id)} »</span></>,
+    reply: (e) => <>a répondu à ton commentaire</>,
+    follow: (e) => <>a commencé à te suivre</>,
+  };
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12 view-enter">
-      <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>
-        Activité
-      </p>
-      <h1 className="font-display italic text-3xl mb-10" style={{ color: "var(--ink)" }}>
-        Interactions
-      </h1>
+    <div className="max-w-2xl mx-auto px-6 py-12 view-enter">
+      <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: "var(--sage)" }}>Activité</p>
+      <h1 className="font-display italic text-3xl mb-10" style={{ color: "var(--ink)" }}>Interactions</h1>
 
-      {loading ? (
+      {events === null ? (
         <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Chargement...</p>
-      ) : totalUnseen === 0 ? (
+      ) : events.length === 0 ? (
         <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>
           Rien pour l'instant — publie un poème pour commencer à recevoir des retours.
         </p>
       ) : (
-        <div className="flex flex-col gap-14">
+        <div className="flex flex-col">
+          {events.map((e, idx) => {
+            const profile = e.voterProfile || e.followerProfile || null;
+            const authorId = e.voter_id || e.follower_id || e.author_id;
+            const name = e.anonymous ? "Anonyme" : (profile?.username || e.author || "Quelqu'un");
+            const avatar = e.anonymous ? null : (profile?.avatar_url || e.authorAvatar);
+            const isClickable = e.type === "like" || e.type === "comment" || e.type === "reply";
 
-          {/* Likes */}
-          {likes.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-5">
-                <Heart size={15} fill="var(--wine)" stroke="var(--wine)" />
-                <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
-                  Likes reçus
-                </h2>
-                <span className="font-mono text-xs px-2 py-0.5 rounded-full ml-1" style={{ background: "var(--wine)", color: "var(--paper-warm)" }}>
-                  {likes.length}
-                </span>
-              </div>
-              <div className="flex flex-col gap-2">
-                {likes.map((l) => (
-                  <button
-                    key={l.id}
-                    onClick={() => goToPoem(l.poem_id)}
-                    className="flex items-center justify-between gap-4 p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
-                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <AuthorBadge
-                        avatarUrl={l.voterProfile?.avatar_url}
-                        letter={l.voterProfile?.username?.charAt(0).toUpperCase() || "?"}
-                        color="var(--wine)"
-                        size={30}
-                      />
-                      <p className="font-ui text-sm truncate" style={{ color: "var(--ink)" }}>
-                        <span
-                          className="font-medium hover:underline"
-                          role="button"
-                          onClick={(e) => { e.stopPropagation(); if (l.voterProfile) goToAuthor(l.voter_id); }}
-                        >
-                          {l.voterProfile?.username || "Quelqu'un"}
-                        </span>
-                        {" a aimé "}
-                        <span className="font-display italic">« {findPoemTitle(l.poem_id)} »</span>
-                      </p>
-                    </div>
-                    <span className="font-mono text-xs shrink-0" style={{ color: "var(--ink-light)" }}>
-                      {timeAgo(l.created_at)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+            const content = (
+              <div className={`flex items-start gap-3 py-4 ${idx < events.length - 1 ? "border-b" : ""}`} style={{ borderColor: "var(--rule)" }}>
+                {/* Avatar */}
+                <button onClick={() => { if (authorId && !e.anonymous) goToAuthor(authorId); }} className="shrink-0 mt-0.5">
+                  <AuthorBadge
+                    avatarUrl={avatar}
+                    letter={(e.anonymous ? "?" : (name || "?").charAt(0)).toUpperCase()}
+                    color={e.anonymous ? "var(--ink-light)" : colorFromString(name || "?")}
+                    size={36}
+                  />
+                </button>
 
-          {/* Comments */}
-          {comments.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-5">
-                <MessageCircle size={15} style={{ color: "var(--sage)" }} />
-                <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
-                  Commentaires sur tes poèmes
-                </h2>
-                <span className="font-mono text-xs px-2 py-0.5 rounded-full ml-1" style={{ background: "var(--sage)", color: "var(--paper-warm)" }}>
-                  {comments.length}
-                </span>
-              </div>
-              <div className="flex flex-col gap-3">
-                {comments.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => goToPoem(c.poem_id)}
-                    className="flex items-start gap-3 p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
-                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-                  >
-                    <AuthorBadge
-                      avatarUrl={c.anonymous ? null : c.authorAvatar}
-                      letter={c.anonymous ? "?" : (c.author || "?").charAt(0)}
-                      color={c.anonymous ? "var(--ink-light)" : "var(--sage)"}
-                      size={30}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-ui text-xs mb-1" style={{ color: "var(--ink-light)" }}>
-                        <span className="font-medium" style={{ color: "var(--ink)" }}>
-                          {c.anonymous ? "Anonyme" : (
-                            c.author_id ? (
-                              <button onClick={(e) => { e.stopPropagation(); goToAuthor(c.author_id); }} className="hover:underline">
-                                {c.author}
-                              </button>
-                            ) : c.author
-                          )}
-                        </span>
-                        {" · "}
-                        <span className="font-display italic">« {findPoemTitle(c.poem_id)} »</span>
-                        {" · "}
-                        {timeAgo(c.created_at)}
-                      </p>
-                      <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
-                        {c.content}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+                <div className="flex-1 min-w-0">
+                  {/* Main line */}
+                  <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
+                    <button
+                      onClick={() => { if (authorId && !e.anonymous) goToAuthor(authorId); }}
+                      className={!e.anonymous && authorId ? "font-semibold hover:underline" : "font-semibold"}
+                    >
+                      {name}
+                    </button>
+                    {" "}
+                    {LABEL[e.type](e)}
+                  </p>
 
-          {/* Replies */}
-          {replies.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-5">
-                <MessageCircle size={15} style={{ color: "var(--ink-light)" }} />
-                <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
-                  Réponses à tes commentaires
-                </h2>
-                <span className="font-mono text-xs px-2 py-0.5 rounded-full ml-1" style={{ background: "var(--rule)", color: "var(--ink)" }}>
-                  {replies.length}
-                </span>
+                  {/* Comment/reply content preview */}
+                  {(e.type === "comment" || e.type === "reply") && e.content && (
+                    <p className="font-display italic text-sm mt-1 leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                      « {e.content.length > 80 ? e.content.slice(0, 80) + "…" : e.content} »
+                    </p>
+                  )}
+
+                  <p className="font-mono text-[10px] mt-1" style={{ color: "var(--ink-light)" }}>
+                    {timeAgo(e.date)}
+                  </p>
+                </div>
+
+                {/* Icon + action */}
+                <div className="flex items-center gap-2 shrink-0 mt-1">
+                  {ICONS[e.type]}
+                  {isClickable && (
+                    <button
+                      onClick={() => goToPoem(e.poem_id)}
+                      className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border transition-opacity hover:opacity-70"
+                      style={{ borderColor: "var(--rule)", color: "var(--ink-light)" }}
+                    >
+                      Voir
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex flex-col gap-3">
-                {replies.map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => goToPoem(r.poem_id)}
-                    className="flex items-start gap-3 p-4 rounded-lg border text-left transition-colors hover:shadow-sm"
-                    style={{ background: "var(--paper-warm)", borderColor: "var(--rule)" }}
-                  >
-                    <AuthorBadge
-                      avatarUrl={r.anonymous ? null : r.authorAvatar}
-                      letter={r.anonymous ? "?" : (r.author || "?").charAt(0)}
-                      color={r.anonymous ? "var(--ink-light)" : "var(--sage)"}
-                      size={30}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-ui text-xs mb-1" style={{ color: "var(--ink-light)" }}>
-                        <span className="font-medium" style={{ color: "var(--ink)" }}>
-                          {r.anonymous ? "Anonyme" : r.author}
-                        </span>
-                        {" a répondu · "}
-                        {timeAgo(r.created_at)}
-                      </p>
-                      <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
-                        {r.content}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+            );
+
+            return <div key={e.id}>{content}</div>;
+          })}
         </div>
       )}
     </div>
@@ -4721,6 +4654,14 @@ export default function App() {
         .gt("created_at", lastInteractionSeen);
       interactionCount += replyCount || 0;
     }
+
+    // New followers
+    const { count: followCount } = await supabase.from("follows")
+      .select("id", { count: "exact", head: true })
+      .eq("followed_id", uid)
+      .gt("created_at", lastInteractionSeen);
+    interactionCount += followCount || 0;
+
     setNotifCount(interactionCount);
 
     // DMs: messages after last DM tab visit
