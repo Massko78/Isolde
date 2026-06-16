@@ -3890,6 +3890,8 @@ function LibraryView({ session, profile, goToAuth }) {
   const [commentDraft, setCommentDraft] = useState("");
   const [commentAnon, setCommentAnon] = useState(false);
   const [sendingComment, setSendingComment] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyDraft, setReplyDraft] = useState("");
   const [addingPoem, setAddingPoem] = useState(false);
 
   // Add poem form (moderator)
@@ -3933,19 +3935,21 @@ function LibraryView({ session, profile, goToAuth }) {
     byAuthor[p.author].push(p);
   });
 
-  const submitComment = async () => {
-    if (!commentDraft.trim() || !openPoem) return;
+  const submitComment = async (content, parentId = null) => {
+    if (!content.trim() || !openPoem) return;
     setSendingComment(true);
     const { data } = await supabase.from("classic_comments").insert({
       poem_id: openPoem.id,
+      parent_id: parentId,
       author: commentAnon ? null : profile?.username || "Anonyme",
       author_id: commentAnon ? null : session?.user?.id || null,
       anonymous: commentAnon,
-      content: commentDraft.trim(),
+      content: content.trim(),
     }).select().single();
     if (data) {
       setComments(prev => [...prev, data]);
-      setCommentDraft("");
+      if (parentId) { setReplyingTo(null); setReplyDraft(""); }
+      else setCommentDraft("");
     }
     setSendingComment(false);
   };
@@ -4033,18 +4037,81 @@ function LibraryView({ session, profile, goToAuth }) {
           </p>
 
           {comments.length > 0 && (
-            <div className="flex flex-col gap-4 mb-6">
-              {comments.map(c => (
-                <div key={c.id} className="flex gap-3">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center font-display italic text-xs shrink-0" style={{ background: c.anonymous ? "var(--rule)" : colorFromString(c.author || "?"), color: "var(--paper-warm)" }}>
-                    {c.anonymous ? "?" : (c.author || "?").charAt(0)}
+            <div className="flex flex-col gap-5 mb-6">
+              {comments.filter(c => !c.parent_id).map(c => (
+                <div key={c.id} className="flex flex-col gap-3">
+                  {/* Main comment */}
+                  <div className="flex gap-3 group">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center font-display italic text-xs shrink-0 mt-0.5" style={{ background: c.anonymous ? "var(--rule)" : colorFromString(c.author || "?"), color: "var(--paper-warm)" }}>
+                      {c.anonymous ? "?" : (c.author || "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
+                        {c.anonymous ? "Anonyme" : c.author} · {timeAgo(c.created_at)}
+                      </p>
+                      <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>{c.content}</p>
+                      {session && (
+                        <button
+                          onClick={() => setReplyingTo(replyingTo === c.id ? null : c.id)}
+                          className="font-ui text-xs mt-1 hover:opacity-70 transition-opacity"
+                          style={{ color: "var(--sage)" }}
+                        >
+                          Répondre
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
-                      {c.anonymous ? "Anonyme" : c.author} · {timeAgo(c.created_at)}
-                    </p>
-                    <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>{c.content}</p>
-                  </div>
+
+                  {/* Replies */}
+                  {comments.filter(r => r.parent_id === c.id).length > 0 && (
+                    <div className="flex flex-col gap-3 pl-10 border-l" style={{ borderColor: "var(--rule)" }}>
+                      {comments.filter(r => r.parent_id === c.id).map(r => (
+                        <div key={r.id} className="flex gap-3">
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center font-display italic text-[10px] shrink-0 mt-0.5" style={{ background: r.anonymous ? "var(--rule)" : colorFromString(r.author || "?"), color: "var(--paper-warm)" }}>
+                            {r.anonymous ? "?" : (r.author || "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-ui text-xs mb-0.5" style={{ color: "var(--ink-light)" }}>
+                              {r.anonymous ? "Anonyme" : r.author} · {timeAgo(r.created_at)}
+                            </p>
+                            <p className="font-ui text-sm leading-relaxed" style={{ color: "var(--ink)" }}>{r.content}</p>
+                            {session && (
+                              <button
+                                onClick={() => setReplyingTo(replyingTo === r.id ? null : r.id)}
+                                className="font-ui text-xs mt-1 hover:opacity-70 transition-opacity"
+                                style={{ color: "var(--sage)" }}
+                              >
+                                Répondre
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Reply box — opens for this comment or any of its replies */}
+                  {(replyingTo === c.id || comments.filter(r => r.parent_id === c.id).some(r => r.id === replyingTo)) && (
+                    <div className="flex items-center gap-2 pl-10">
+                      <input
+                        value={replyDraft}
+                        onChange={e => setReplyDraft(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && submitComment(replyDraft, c.id)}
+                        placeholder={`Répondre à ${replyingTo === c.id ? (c.anonymous ? "Anonyme" : c.author) : (comments.find(r => r.id === replyingTo)?.author || "Anonyme")}…`}
+                        autoFocus
+                        className="flex-1 font-ui text-sm px-4 py-2 rounded-full border bg-transparent outline-none"
+                        style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+                      />
+                      <button
+                        onClick={() => submitComment(replyDraft, c.id)}
+                        disabled={!replyDraft.trim() || sendingComment}
+                        className="flex items-center gap-1.5 font-ui text-xs px-4 py-2 rounded-full disabled:opacity-30"
+                        style={{ background: "var(--ink)", color: "var(--paper-warm)" }}
+                      >
+                        <Send size={12} /> Envoyer
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
