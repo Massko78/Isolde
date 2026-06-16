@@ -371,6 +371,16 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
   const featured = collections[0];
   const featuredPoem = featured.poems[0];
   const excerptLines = featuredPoem.lines.filter((l) => l).slice(0, 3);
+
+  // Poems recently added to existing collections (last 7 days, not the whole collection being new)
+  const SEVEN_DAYS = 7 * 24 * 3600 * 1000;
+  const recentPoems = collections
+    .filter(c => Date.now() - new Date(c.created_at).getTime() > 48 * 3600 * 1000)
+    .flatMap(c => (c.poems || []).map(p => ({ ...p, collection: c })))
+    .filter(p => p.created_at && Date.now() - new Date(p.created_at).getTime() < SEVEN_DAYS)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 8);
+
   return (
     <div className="max-w-5xl mx-auto px-6 view-enter">
 
@@ -496,6 +506,69 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
                     <Heart size={13} fill="var(--wine)" />
                     {p.likes_count}
                   </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Recently added poems to existing collections */}
+      {recentPoems.length > 0 && (
+        <section className="pb-14">
+          <div className="flex items-center gap-3 mb-6">
+            <h2 className="font-display italic text-2xl" style={{ color: "var(--ink)" }}>
+              Nouveaux poèmes
+            </h2>
+            <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: "var(--wine)", color: "var(--paper-warm)" }}>
+              {recentPoems.length}
+            </span>
+          </div>
+          <div className="flex flex-col gap-3">
+            {recentPoems.map((p) => {
+              const preview = (p.lines || []).filter(l => l.trim()).slice(0, 2);
+              const sc = p.collection.sealColor || colorFromString(p.collection.title);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => openCollection(p.collection, (p.collection.poems || []).findIndex(x => x.id === p.id))}
+                  className="flex items-start gap-4 p-4 rounded-xl border text-left transition-all hover:shadow-md"
+                  style={{ background: "var(--paper-warm)", borderColor: "var(--rule)", borderLeft: `3px solid ${sc}` }}
+                >
+                  {/* Collection badge */}
+                  <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center font-display italic text-sm" style={{ background: sc, color: "var(--paper-warm)" }}>
+                      {p.collection.seal}
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <p className="font-display italic text-base" style={{ color: "var(--ink)" }}>
+                        {p.title}
+                      </p>
+                      <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: sc, border: `1px solid ${sc}44`, background: `${sc}15` }}>
+                        {p.collection.title}
+                      </span>
+                    </div>
+                    <p className="font-ui text-xs mb-1" style={{ color: "var(--ink-light)" }}>
+                      {p.collection.author_id ? (
+                        <span role="button" onClick={e => { e.stopPropagation(); goToAuthor(p.collection.author_id); }} className="hover:underline">
+                          {p.collection.author}
+                        </span>
+                      ) : p.collection.author}
+                      {" · "}
+                      {timeAgo(p.created_at)}
+                    </p>
+                    <div className="font-display italic text-sm leading-relaxed" style={{ color: "var(--ink-light)" }}>
+                      {preview.map((line, i) => <p key={i}>{line}</p>)}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0 mt-1" style={{ color: "var(--wine)" }}>
+                    <Heart size={12} fill={p.likes_count > 0 ? "var(--wine)" : "none"} />
+                    <span className="font-mono text-xs">{p.likes_count}</span>
+                  </div>
                 </button>
               );
             })}
