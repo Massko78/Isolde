@@ -1419,12 +1419,13 @@ function AuthView({ onSuccess }) {
         setSubmitting(false);
         return;
       }
-      const { error: profileError } = await supabase.from("profiles").insert({
+      // Upsert profile — handles both fresh signup and edge cases
+      const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
         username: username.trim(),
-      });
+      }, { onConflict: "id" });
       if (profileError) {
-        setErrorMsg("Compte créé, mais le profil n'a pas pu être enregistré (pseudo déjà pris ?).");
+        setErrorMsg("Compte créé, mais le profil n'a pas pu être enregistré. Essaie de te connecter.");
         setSubmitting(false);
         return;
       }
@@ -1861,12 +1862,21 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
   const [avatarUrl, setAvatarUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [loadTimeout, setLoadTimeout] = useState(false);
 
   useEffect(() => {
     setUsername(profile?.username || "");
     setBio(profile?.bio || "");
     setAvatarUrl(profile?.avatar_url || "");
   }, [profile]);
+
+  // If profile still null after 4s, show an error instead of infinite spinner
+  useEffect(() => {
+    if (!profile && session) {
+      const t = setTimeout(() => setLoadTimeout(true), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [profile, session]);
 
   if (!session) {
     return (
@@ -1892,6 +1902,21 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
   }
 
   if (!profile) {
+    if (loadTimeout) {
+      return (
+        <div className="max-w-3xl mx-auto px-6 py-24 text-center">
+          <p className="font-display italic text-xl mb-4" style={{ color: "var(--ink-light)" }}>
+            Profil introuvable.
+          </p>
+          <p className="font-ui text-sm mb-6" style={{ color: "var(--ink-light)" }}>
+            Une erreur est survenue lors du chargement de ton profil.
+          </p>
+          <button onClick={() => window.location.reload()} className="font-ui text-sm px-5 py-2.5 rounded-full" style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
+            Recharger la page
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="max-w-3xl mx-auto px-6 py-24 text-center">
         <p className="font-display italic text-xl" style={{ color: "var(--ink-light)" }}>
@@ -4308,20 +4333,32 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
 
-  const loadProfile = async (userId) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
-    setProfile(data || null);
+  const loadProfile = async (userId, emailHint) => {
+    const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    if (data) {
+      setProfile(data);
+      return;
+    }
+    // Profile doesn't exist yet — create a default one so the UI never hangs
+    const defaultUsername = emailHint
+      ? emailHint.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").slice(0, 20) || "utilisateur"
+      : "utilisateur";
+    const { data: created } = await supabase.from("profiles")
+      .insert({ id: userId, username: defaultUsername })
+      .select()
+      .maybeSingle();
+    setProfile(created || { id: userId, username: defaultUsername, avatar_url: null, bio: null, is_moderator: false });
   };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
-      if (data.session) loadProfile(data.session.user.id);
+      if (data.session) loadProfile(data.session.user.id, data.session.user.email);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       if (newSession) {
-        loadProfile(newSession.user.id);
+        loadProfile(newSession.user.id, newSession.user.email);
       } else {
         setProfile(null);
       }
