@@ -533,11 +533,16 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
               const spineColor = c.sealColor || colorFromString(c.title);
               const totalLikes = (c.poems||[]).reduce((s,p) => s + (p.likes_count||0), 0);
               const isNew = Date.now() - new Date(c.created_at).getTime() < 48 * 3600 * 1000;
-              // Derive a dark bg from spineColor for the cover tint
+              const storedCount = parseInt(localStorage.getItem(`col_poems_${c.id}`) || "0", 10);
+              const hasNewPoem = !isNew && (c.poems||[]).length > storedCount && storedCount > 0;
+              const newPoemsCount = hasNewPoem ? (c.poems||[]).length - storedCount : 0;
               return (
                 <button
                   key={c.id}
-                  onClick={() => openCollection(c, 0)}
+                  onClick={() => {
+                    localStorage.setItem(`col_poems_${c.id}`, String((c.poems||[]).length));
+                    openCollection(c, 0);
+                  }}
                   className="text-left group relative"
                 >
                   {/* Book shadow lift on hover */}
@@ -618,6 +623,13 @@ function HomeView({ collections, topLiked, freePoems, openCollection, openFreePo
                       {isNew && (
                         <div className="absolute top-2 left-4 z-[4] px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: `${spineColor}33`, color: spineColor, border: `1px solid ${spineColor}55` }}>
                           Nouveau
+                        </div>
+                      )}
+
+                      {/* New poems badge */}
+                      {!isNew && hasNewPoem && (
+                        <div className="absolute top-2 left-4 z-[4] flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: "rgba(139,58,74,0.35)", color: "#D08C9B", border: "1px solid rgba(139,58,74,0.5)" }}>
+                          <PenLine size={8} /> +{newPoemsCount} poème{newPoemsCount > 1 ? "s" : ""}
                         </div>
                       )}
 
@@ -1318,8 +1330,8 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                     <div className="flex gap-3 group">
                       <AuthorBadge
                         avatarUrl={c.anonymous ? null : c.authorAvatar}
-                        letter={c.anonymous ? "?" : (c.author || "?").charAt(0)}
-                        color={c.anonymous ? "var(--ink-light)" : "var(--sage)"}
+                        letter={c.anonymous ? "?" : (c.author || "?").charAt(0).toUpperCase()}
+                        color={c.anonymous ? "var(--ink-light)" : colorFromString(c.author || "?")}
                         size={28}
                       />
                       <div className="flex-1">
@@ -1366,8 +1378,8 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                             <div key={r.id} className="flex gap-3 group">
                               <AuthorBadge
                                 avatarUrl={r.anonymous ? null : r.authorAvatar}
-                                letter={r.anonymous ? "?" : (r.author || "?").charAt(0)}
-                                color={r.anonymous ? "var(--ink-light)" : "var(--sage)"}
+                                letter={r.anonymous ? "?" : (r.author || "?").charAt(0).toUpperCase()}
+                                color={r.anonymous ? "var(--ink-light)" : colorFromString(r.author || "?")}
                                 size={24}
                               />
                               <div className="flex-1">
@@ -1408,14 +1420,18 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                       </div>
                     )}
 
-                    {/* Reply box — shown under the specific reply or under the main comment */}
-                    {replyingTo === c.id && (
+                    {/* Reply box — shown when replying to the main comment OR to any reply in this thread */}
+                    {(replyingTo === c.id || comments.filter(r => r.parent_id === c.id).some(r => r.id === replyingTo)) && (
                       <div className="flex items-center gap-2 pl-10">
                         <input
                           value={replyDraft}
                           onChange={(e) => setReplyDraft(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && submitComment(replyDraft, c.id)}
-                          placeholder={`Répondre à ${c.anonymous ? "Anonyme" : c.author}…`}
+                          placeholder={(() => {
+                            if (replyingTo === c.id) return `Répondre à ${c.anonymous ? "Anonyme" : c.author}…`;
+                            const target = comments.find(r => r.id === replyingTo);
+                            return `Répondre à ${target?.anonymous ? "Anonyme" : target?.author || ""}…`;
+                          })()}
                           className="flex-1 font-ui text-sm px-4 py-2 rounded-full border bg-transparent outline-none focus:ring-1"
                           style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
                           autoFocus
@@ -4357,6 +4373,13 @@ export default function App() {
       }))
       .filter((c) => c.poems.length > 0);
     setCollections(shaped);
+    // Initialize poem count cache for first-time visitors (no badge shown on first load)
+    shaped.forEach(c => {
+      const key = `col_poems_${c.id}`;
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, String((c.poems||[]).length));
+      }
+    });
 
     const free = poems
       .filter((p) => p && !p.collection_id && (p.status === "published" || !p.status))
