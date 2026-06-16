@@ -1888,6 +1888,11 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
   const [followersList, setFollowersList] = useState([]);
   const [followingList, setFollowingList] = useState([]);
   const [bannerUrl, setBannerUrl] = useState("");
+  const [bannerPosition, setBannerPosition] = useState(50); // 0-100, vertical %
+  const [draggingBanner, setDraggingBanner] = useState(false);
+  const bannerRef = useRef(null);
+  const dragStartY = useRef(null);
+  const dragStartPos = useRef(null);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -1902,6 +1907,7 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
     setBio(profile?.bio || "");
     setAvatarUrl(profile?.avatar_url || "");
     setBannerUrl(profile?.banner_url || "");
+    setBannerPosition(profile?.banner_position ?? 50);
   }, [profile]);
 
   // If profile still null after 4s, show an error instead of infinite spinner
@@ -1978,6 +1984,7 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
         bio: bio.trim() || null,
         avatar_url: avatarUrl.trim() || null,
         banner_url: bannerUrl.trim() || null,
+        banner_position: bannerPosition,
       })
       .eq("id", session.user.id)
       .select()
@@ -2023,9 +2030,49 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
       {/* ── HERO BANNER ── */}
       <div className="relative mb-0">
         {/* Banner */}
-        <div className="relative w-full overflow-hidden" style={{ height: 200, borderRadius: "0 0 0 0" }}>
+        <div
+          ref={bannerRef}
+          className="relative w-full overflow-hidden select-none"
+          style={{
+            height: 200,
+            cursor: profile.banner_url && editing ? (draggingBanner ? "grabbing" : "grab") : "default",
+          }}
+          onMouseDown={profile.banner_url && editing ? (e) => {
+            setDraggingBanner(true);
+            dragStartY.current = e.clientY;
+            dragStartPos.current = bannerPosition;
+          } : undefined}
+          onMouseMove={draggingBanner ? (e) => {
+            const rect = bannerRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const dy = e.clientY - dragStartY.current;
+            const pct = (dy / rect.height) * 100;
+            setBannerPosition(Math.max(0, Math.min(100, dragStartPos.current - pct)));
+          } : undefined}
+          onMouseUp={() => setDraggingBanner(false)}
+          onMouseLeave={() => setDraggingBanner(false)}
+          onTouchStart={profile.banner_url && editing ? (e) => {
+            setDraggingBanner(true);
+            dragStartY.current = e.touches[0].clientY;
+            dragStartPos.current = bannerPosition;
+          } : undefined}
+          onTouchMove={draggingBanner ? (e) => {
+            const rect = bannerRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const dy = e.touches[0].clientY - dragStartY.current;
+            const pct = (dy / rect.height) * 100;
+            setBannerPosition(Math.max(0, Math.min(100, dragStartPos.current - pct)));
+          } : undefined}
+          onTouchEnd={() => setDraggingBanner(false)}
+        >
           {profile.banner_url ? (
-            <img src={profile.banner_url} alt="" className="w-full h-full object-cover" />
+            <img
+              src={profile.banner_url}
+              alt=""
+              draggable={false}
+              className="w-full h-full object-cover"
+              style={{ objectPosition: `center ${bannerPosition}%` }}
+            />
           ) : (
             <div className="w-full h-full" style={{
               background: `linear-gradient(135deg, ${colorFromString(profile.username)}44 0%, #0F0E18 60%, ${colorFromString(profile.username)}22 100%)`,
@@ -2041,6 +2088,18 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
           )}
           {/* Gradient overlay bottom */}
           <div className="absolute bottom-0 left-0 right-0 h-24" style={{ background: "linear-gradient(to bottom, transparent, #0F0E18)" }} />
+
+          {/* Drag hint when editing */}
+          {editing && profile.banner_url && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ background: "rgba(0,0,0,0.25)" }}>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full font-ui text-xs" style={{ background: "rgba(15,14,24,0.8)", color: "var(--ink-light)", border: "1px solid rgba(255,255,255,0.15)" }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 1v12M7 1L4 4M7 1l3 3M7 13l-3-3M7 13l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Glisse pour repositionner
+              </div>
+            </div>
+          )}
 
           {/* Edit banner button */}
           {!editing && (
