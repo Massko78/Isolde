@@ -2367,7 +2367,7 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
           {/* Pinned poem card */}
           {pinnedPoem && (() => {
             const col = pinnedPoem.collection;
-            const bgImg = col?.cover_url || pinnedPoem.cover_url || null;
+            const bgImg = col?.cover_url || pinnedPoem.image_url || pinnedPoem.cover_url || null;
             const sc = col ? (col.sealColor || colorFromString(col.title)) : colorFromString(pinnedPoem.title);
             const preview = (pinnedPoem.lines || []).filter(l => l.trim()).slice(0, 4);
             return (
@@ -2378,15 +2378,19 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
               >
                 {/* Background */}
                 {bgImg ? (
-                  <img src={bgImg} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <>
+                    <img src={bgImg} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                    {/* Spirit Blossom color tint layer */}
+                    <div className="absolute inset-0" style={{ background: `${sc}44`, mixBlendMode: "color" }} />
+                  </>
                 ) : (
                   <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${sc}44 0%, #0F0E18 70%)` }} />
                 )}
 
-                {/* Overlay */}
+                {/* Readability overlay — lighter when there's an image to let it show */}
                 <div className="absolute inset-0" style={{
                   background: bgImg
-                    ? `linear-gradient(to bottom, rgba(6,4,18,0.55) 0%, transparent 35%, rgba(6,4,18,0.88) 70%, rgba(6,4,18,0.98) 100%)`
+                    ? `linear-gradient(to bottom, rgba(6,4,18,0.35) 0%, rgba(6,4,18,0.1) 35%, rgba(6,4,18,0.7) 65%, rgba(6,4,18,0.96) 100%)`
                     : `linear-gradient(to bottom, rgba(6,4,18,0.3) 0%, rgba(6,4,18,0.85) 100%)`,
                 }} />
 
@@ -2954,6 +2958,80 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
 
       {/* Content */}
       <div className="px-6 sm:px-8">
+
+        {/* Poème épinglé */}
+        {authorProfile.pinned_poem_id && (() => {
+          const pinnedId = authorProfile.pinned_poem_id;
+          const isFree = authorProfile.pinned_is_free;
+          const pinnedPoem = isFree
+            ? authorFreePoems.find(p => p.id === pinnedId)
+            : authorCollections.flatMap(c => (c.poems||[]).map(p => ({ ...p, collection: c }))).find(p => p.id === pinnedId);
+          if (!pinnedPoem) return null;
+          const col = pinnedPoem.collection || null;
+          const bgImg = col?.cover_url || pinnedPoem.image_url || pinnedPoem.cover_url || null;
+          const sc = col ? (col.sealColor || colorFromString(col.title)) : colorFromString(pinnedPoem.title);
+          const preview = (pinnedPoem.lines || []).filter(l => l.trim()).slice(0, 4);
+          return (
+            <section className="mt-8 mb-10">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] mb-4 flex items-center gap-2" style={{ color: "var(--sage)" }}>
+                <Pin size={11} /> Poème épinglé
+              </p>
+              <button
+                onClick={() => isFree ? openFreePoem(pinnedPoem) : openCollection(col, (col.poems||[]).findIndex(p => p.id === pinnedPoem.id))}
+                className="w-full text-left relative overflow-hidden transition-all hover:shadow-2xl"
+                style={{ borderRadius: 16, border: "1px solid rgba(201,168,124,0.15)", minHeight: 240 }}
+              >
+                {bgImg ? (
+                  <>
+                    <img src={bgImg} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                    <div className="absolute inset-0" style={{ background: `${sc}44`, mixBlendMode: "color" }} />
+                  </>
+                ) : (
+                  <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${sc}44 0%, #0F0E18 70%)` }} />
+                )}
+                <div className="absolute inset-0" style={{
+                  background: bgImg
+                    ? "linear-gradient(to bottom, rgba(6,4,18,0.35) 0%, rgba(6,4,18,0.1) 35%, rgba(6,4,18,0.7) 65%, rgba(6,4,18,0.96) 100%)"
+                    : "linear-gradient(to bottom, rgba(6,4,18,0.3) 0%, rgba(6,4,18,0.85) 100%)",
+                }} />
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 700 240" xmlns="http://www.w3.org/2000/svg" style={{ opacity: 0.5 }}>
+                  <ellipse cx="80" cy="40" rx="22" ry="9" fill="#F4B8C8" opacity="0.3" transform="rotate(-25 80 40)"/>
+                  <ellipse cx="580" cy="35" rx="18" ry="7" fill={sc} opacity="0.25" transform="rotate(15 580 35)"/>
+                  <circle cx="120" cy="65" r="2.5" fill="#C9A87C" opacity="0.4"/>
+                  <circle cx="540" cy="110" r="2" fill="#C9A87C" opacity="0.3"/>
+                </svg>
+                <div className="absolute top-3 right-4 z-[3] flex items-center gap-1.5 px-2.5 py-1 rounded-full font-mono text-[9px] uppercase tracking-wider" style={{ background: "rgba(201,168,124,0.12)", border: "1px solid rgba(201,168,124,0.3)", color: "#C9A87C" }}>
+                  <Pin size={8} /> Épinglé
+                </div>
+                <div className="relative z-[3] p-7 pt-10 flex flex-col justify-end" style={{ minHeight: 240 }}>
+                  {col && <p className="font-mono text-[10px] uppercase tracking-[0.15em] mb-2" style={{ color: "rgba(201,168,124,0.6)" }}>{col.title}</p>}
+                  <p className="font-display italic mb-4" style={{ fontSize: "clamp(1.3rem,3vw,1.9rem)", color: "#F0E8D8", lineHeight: 1.2, textShadow: "0 2px 12px rgba(0,0,0,0.5)" }}>
+                    {pinnedPoem.title}
+                  </p>
+                  <div className="font-display italic text-sm leading-loose mb-4" style={{ color: "rgba(237,234,227,0.65)", borderLeft: "1px solid rgba(201,168,124,0.3)", paddingLeft: 14 }}>
+                    {preview.map((line, i) => <p key={i}>{line}</p>)}
+                    {(pinnedPoem.lines||[]).filter(l=>l.trim()).length > 4 && <p style={{ opacity: 0.4, fontSize: 12 }}>…</p>}
+                  </div>
+                  <div className="flex items-center justify-between pt-3" style={{ borderTop: "1px solid rgba(201,168,124,0.1)" }}>
+                    <div className="flex items-center gap-2">
+                      {authorProfile.avatar_url ? (
+                        <img src={authorProfile.avatar_url} alt="" className="rounded-full object-cover" style={{ width: 24, height: 24 }} />
+                      ) : (
+                        <div className="rounded-full flex items-center justify-center font-display italic text-xs" style={{ width: 24, height: 24, background: sc, color: "#F0E8D8" }}>
+                          {authorProfile.username.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="font-ui text-xs" style={{ color: "rgba(201,168,124,0.65)" }}>{authorProfile.username}</span>
+                    </div>
+                    <span className="flex items-center gap-1 font-mono text-xs" style={{ color: "rgba(208,140,155,0.7)" }}>
+                      <Heart size={11} fill="rgba(139,58,74,0.8)" stroke="none" /> {pinnedPoem.likes_count || 0}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            </section>
+          );
+        })()}
 
         {/* Recueils — book cards */}
         {authorCollections.length > 0 && (
