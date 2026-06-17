@@ -4374,7 +4374,7 @@ function LibraryView({ session, profile, goToAuth, goToAuthor, initialPoem, onCl
                 <EyeOff size={12} /> Anonyme
               </label>
               {session ? (
-                <button onClick={submitComment} disabled={!commentDraft.trim() || sendingComment}
+                <button onClick={() => submitComment(commentDraft)} disabled={!commentDraft.trim() || sendingComment}
                   className="flex items-center gap-1.5 font-ui text-xs px-4 py-2 rounded-full disabled:opacity-30 transition-opacity"
                   style={{ background: "var(--ink)", color: "var(--paper-warm)" }}>
                   <Send size={12} /> {sendingComment ? "..." : "Commenter"}
