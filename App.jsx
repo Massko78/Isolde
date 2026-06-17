@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit, Upload, Mail, Zap, Crown } from "lucide-react";
+import { BookOpen, PenLine, User, ArrowLeft, ArrowRight, Heart, Bookmark, MessageCircle, Image as ImageIcon, EyeOff, Send, LogIn, LogOut, Star, Trash2, Flag, Search, Share2, ShieldCheck, X, Moon, Sun, Maximize2, Minimize2, UserPlus, UserMinus, Trophy, Users, FileEdit, Upload, Mail, Zap, Crown, Pin } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 // Stable identifier used for the like system, even for visitors without an account
@@ -1154,16 +1154,22 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                 Note moyenne
               </p>
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Star
-                      key={i}
-                      size={24}
-                      fill={i <= Math.round(avgRating) ? "var(--wine)" : "none"}
-                      stroke="var(--wine)"
-                      strokeWidth={1.5}
-                    />
-                  ))}
+                <div className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map((i) => {
+                    const full = avgRating >= i;
+                    const half = !full && avgRating >= i - 0.5;
+                    return (
+                      <div key={i} className="relative" style={{ width: 24, height: 24 }}>
+                        <Star size={22} fill="none" stroke="var(--wine)" strokeWidth={1.5} style={{ position: "absolute", top: 1, left: 1 }} />
+                        {full && <Star size={22} fill="var(--wine)" stroke="var(--wine)" strokeWidth={1.5} style={{ position: "absolute", top: 1, left: 1 }} />}
+                        {half && (
+                          <div style={{ position: "absolute", top: 1, left: 1, width: 11, height: 22, overflow: "hidden" }}>
+                            <Star size={22} fill="var(--wine)" stroke="var(--wine)" strokeWidth={1.5} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <span className="font-display italic text-xl" style={{ color: "var(--ink)" }}>
                   {ratings.length > 0 ? avgRating.toFixed(1) : "—"}
@@ -1179,22 +1185,36 @@ function ReaderView({ collection, poemIndex, setPoemIndex, back, session, profil
                 <p className="font-mono text-[11px] uppercase tracking-[0.2em] mb-2 sm:text-right" style={{ color: "var(--sage)" }}>
                   Votre note
                 </p>
-                <div className="flex items-center gap-1" onMouseLeave={() => setHoverRating(0)}>
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleRate(i)}
-                      onMouseEnter={() => setHoverRating(i)}
-                      className="transition-transform hover:scale-110"
-                    >
-                      <Star
-                        size={30}
-                        fill={i <= (hoverRating || userRating) ? "var(--wine)" : "none"}
-                        stroke="var(--wine)"
-                        strokeWidth={1.5}
-                      />
-                    </button>
-                  ))}
+                <div className="flex items-center gap-0.5" onMouseLeave={() => setHoverRating(0)}>
+                  {[1, 2, 3, 4, 5].map((i) => {
+                    const active = hoverRating || userRating;
+                    const full = active >= i;
+                    const half = !full && active >= i - 0.5;
+                    return (
+                      <div
+                        key={i}
+                        className="relative cursor-pointer transition-transform hover:scale-110"
+                        style={{ width: 32, height: 32 }}
+                        onMouseMove={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = e.clientX - rect.left;
+                          setHoverRating(x < rect.width / 2 ? i - 0.5 : i);
+                        }}
+                        onClick={() => handleRate(hoverRating || userRating)}
+                      >
+                        {/* Empty star base */}
+                        <Star size={30} fill="none" stroke="var(--wine)" strokeWidth={1.5} style={{ position: "absolute", top: 1, left: 1 }} />
+                        {/* Full fill */}
+                        {full && <Star size={30} fill="var(--wine)" stroke="var(--wine)" strokeWidth={1.5} style={{ position: "absolute", top: 1, left: 1 }} />}
+                        {/* Half fill via clip */}
+                        {half && (
+                          <div style={{ position: "absolute", top: 1, left: 1, width: 15, height: 30, overflow: "hidden" }}>
+                            <Star size={30} fill="var(--wine)" stroke="var(--wine)" strokeWidth={1.5} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -2302,6 +2322,129 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
             <button onClick={() => setEditing(false)} className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Annuler</button>
           </div>
         </div>
+      )}
+
+      {/* ── POÈME ÉPINGLÉ ── */}
+      {(pinnedPoem || !editing) && (
+        <section className="mt-8 mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] flex items-center gap-2" style={{ color: "var(--sage)" }}>
+              <Pin size={11} /> Poème épinglé
+            </p>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShowPinSelector(!showPinSelector)} className="font-ui text-xs hover:opacity-70 transition-opacity" style={{ color: "var(--ink-light)" }}>
+                {pinnedPoem ? "Changer" : "+ Épingler un poème"}
+              </button>
+              {pinnedPoem && (
+                <button onClick={removePinned} className="font-ui text-xs hover:opacity-70 transition-opacity" style={{ color: "var(--ink-light)" }}>
+                  Retirer
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Pin selector dropdown */}
+          {showPinSelector && (
+            <div className="mb-4 p-4 rounded-xl border flex flex-col gap-2 max-h-60 overflow-y-auto" style={{ borderColor: "var(--rule)", background: "var(--paper-warm)" }}>
+              <p className="font-mono text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--ink-light)" }}>Choisir un poème</p>
+              {mine.flatMap(c => (c.poems||[]).map(p => ({ ...p, collection: c, isFree: false }))).concat(myFreePoems.map(p => ({ ...p, collection: null, isFree: true }))).map(p => (
+                <button key={`${p.isFree?'free':'col'}-${p.id}`}
+                  onClick={() => savePinned(p.id, p.isFree)}
+                  className="flex items-center gap-3 p-2 rounded-lg text-left hover:opacity-80 transition-opacity"
+                  style={{ background: pinnedPoemId === p.id ? "rgba(139,58,74,0.15)" : "transparent" }}>
+                  <span className="font-display italic text-sm" style={{ color: "var(--ink)" }}>{p.title}</span>
+                  <span className="font-mono text-[10px] ml-auto shrink-0" style={{ color: "var(--ink-light)" }}>
+                    {p.isFree ? "Libre" : p.collection?.title}
+                  </span>
+                </button>
+              ))}
+              {mine.length === 0 && myFreePoems.length === 0 && (
+                <p className="font-ui text-sm" style={{ color: "var(--ink-light)" }}>Publie d'abord un poème.</p>
+              )}
+            </div>
+          )}
+
+          {/* Pinned poem card */}
+          {pinnedPoem && (() => {
+            const col = pinnedPoem.collection;
+            const bgImg = col?.cover_url || null;
+            const sc = col ? (col.sealColor || colorFromString(col.title)) : colorFromString(pinnedPoem.title);
+            const preview = (pinnedPoem.lines || []).filter(l => l.trim()).slice(0, 4);
+            return (
+              <button
+                onClick={() => pinnedPoem.isFree ? openFreePoem(pinnedPoem) : openCollection(col, (col.poems||[]).findIndex(p => p.id === pinnedPoem.id))}
+                className="w-full text-left relative overflow-hidden transition-all hover:shadow-2xl"
+                style={{ borderRadius: 16, border: "1px solid rgba(201,168,124,0.15)", minHeight: 260 }}
+              >
+                {/* Background */}
+                {bgImg ? (
+                  <img src={bgImg} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${sc}44 0%, #0F0E18 70%)` }} />
+                )}
+
+                {/* Overlay */}
+                <div className="absolute inset-0" style={{
+                  background: bgImg
+                    ? `linear-gradient(to bottom, rgba(6,4,18,0.55) 0%, transparent 35%, rgba(6,4,18,0.88) 70%, rgba(6,4,18,0.98) 100%)`
+                    : `linear-gradient(to bottom, rgba(6,4,18,0.3) 0%, rgba(6,4,18,0.85) 100%)`,
+                }} />
+
+                {/* Petal SVG */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg" style={{ opacity: 0.5 }}>
+                  <ellipse cx="80" cy="45" rx="22" ry="9" fill="#F4B8C8" opacity="0.35" transform="rotate(-25 80 45)"/>
+                  <ellipse cx="580" cy="38" rx="18" ry="7" fill="#F4B8C8" opacity="0.25" transform="rotate(15 580 38)"/>
+                  <ellipse cx="620" cy="90" rx="14" ry="6" fill={sc} opacity="0.2" transform="rotate(-10 620 90)"/>
+                  <circle cx="120" cy="70" r="2.5" fill="#C9A87C" opacity="0.4"/>
+                  <circle cx="540" cy="130" r="2" fill="#C9A87C" opacity="0.35"/>
+                </svg>
+
+                {/* Gold ornament */}
+                <div className="absolute top-4 left-6 right-6 z-[2]" style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(201,168,124,0.45), transparent)" }} />
+
+                {/* Badge */}
+                <div className="absolute top-3 right-4 z-[3] flex items-center gap-1.5 px-2.5 py-1 rounded-full font-mono text-[9px] uppercase tracking-wider"
+                  style={{ background: "rgba(201,168,124,0.12)", border: "1px solid rgba(201,168,124,0.3)", color: "#C9A87C" }}>
+                  <Pin size={8} /> Épinglé
+                </div>
+
+                {/* Content */}
+                <div className="relative z-[3] p-7 pt-12 flex flex-col justify-end" style={{ minHeight: 260 }}>
+                  {col && (
+                    <p className="font-mono text-[10px] uppercase tracking-[0.15em] mb-2" style={{ color: "rgba(201,168,124,0.6)" }}>
+                      {col.title}
+                    </p>
+                  )}
+                  <p className="font-display italic mb-4" style={{ fontSize: "clamp(1.3rem,3vw,1.9rem)", color: "#F0E8D8", lineHeight: 1.2, textShadow: "0 2px 12px rgba(0,0,0,0.5)" }}>
+                    {pinnedPoem.title}
+                  </p>
+                  <div className="font-display italic text-sm leading-loose mb-5"
+                    style={{ color: "rgba(237,234,227,0.65)", borderLeft: "1px solid rgba(201,168,124,0.3)", paddingLeft: 14 }}>
+                    {preview.map((line, i) => <p key={i}>{line}</p>)}
+                    {(pinnedPoem.lines||[]).filter(l=>l.trim()).length > 4 && <p style={{ opacity: 0.4, fontSize: 12 }}>…</p>}
+                  </div>
+                  <div className="flex items-center justify-between pt-3" style={{ borderTop: "1px solid rgba(201,168,124,0.1)" }}>
+                    <div className="flex items-center gap-2">
+                      {profile.avatar_url ? (
+                        <img src={profile.avatar_url} alt="" className="rounded-full object-cover" style={{ width: 24, height: 24 }} />
+                      ) : (
+                        <div className="rounded-full flex items-center justify-center font-display italic text-xs" style={{ width: 24, height: 24, background: sc, color: "var(--paper-warm)" }}>
+                          {profile.username.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="font-ui text-xs" style={{ color: "rgba(201,168,124,0.65)" }}>{profile.username}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="flex items-center gap-1 font-mono text-xs" style={{ color: "rgba(208,140,155,0.7)" }}>
+                        <Heart size={11} fill="rgba(139,58,74,0.8)" stroke="none" /> {pinnedPoem.likes_count || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })()}
+        </section>
       )}
 
       {/* ── MES RECUEILS — book cards ── */}
