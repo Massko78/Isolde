@@ -1881,11 +1881,18 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
   const [followersList, setFollowersList] = useState([]);
   const [followingList, setFollowingList] = useState([]);
   const [bannerUrl, setBannerUrl] = useState("");
-  const [bannerPosition, setBannerPosition] = useState(50); // 0-100, vertical %
+  const [bannerPosition, setBannerPosition] = useState(50);
   const [draggingBanner, setDraggingBanner] = useState(false);
   const bannerRef = useRef(null);
   const dragStartY = useRef(null);
   const dragStartPos = useRef(null);
+  const [pinnedPoemId, setPinnedPoemId] = useState(null);
+  const [pinnedIsFree, setPinnedIsFree] = useState(false);
+  const [showPinSelector, setShowPinSelector] = useState(false);
+  const [avatarPosition, setAvatarPosition] = useState({ x: 50, y: 50 });
+  const [avatarZoom, setAvatarZoom] = useState(1);
+  const avatarDragRef = useRef(null);
+  const avatarDragStart = useRef(null);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -1901,6 +1908,10 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
     setAvatarUrl(profile?.avatar_url || "");
     setBannerUrl(profile?.banner_url || "");
     setBannerPosition(profile?.banner_position ?? 50);
+    setPinnedPoemId(profile?.pinned_poem_id || null);
+    setPinnedIsFree(profile?.pinned_is_free || false);
+    setAvatarPosition({ x: profile?.avatar_x ?? 50, y: profile?.avatar_y ?? 50 });
+    setAvatarZoom(profile?.avatar_zoom ?? 1);
   }, [profile]);
 
   // If profile still null after 4s, show an error instead of infinite spinner
@@ -1978,6 +1989,11 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
         avatar_url: avatarUrl.trim() || null,
         banner_url: bannerUrl.trim() || null,
         banner_position: bannerPosition,
+        pinned_poem_id: pinnedPoemId || null,
+        pinned_is_free: pinnedIsFree,
+        avatar_x: avatarPosition.x,
+        avatar_y: avatarPosition.y,
+        avatar_zoom: avatarZoom,
       })
       .eq("id", session.user.id)
       .select()
@@ -1996,6 +2012,27 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
   };
 
   const spineColor = (c) => c.sealColor || colorFromString(c.title);
+
+  // Find the pinned poem object
+  const pinnedPoem = pinnedPoemId
+    ? pinnedIsFree
+      ? myFreePoems.find(p => p.id === pinnedPoemId) || null
+      : mine.flatMap(c => (c.poems||[]).map(p => ({ ...p, collection: c }))).find(p => p.id === pinnedPoemId) || null
+    : null;
+
+  const savePinned = async (poemId, isFree) => {
+    setPinnedPoemId(poemId);
+    setPinnedIsFree(isFree);
+    setShowPinSelector(false);
+    await supabase.from("profiles").update({ pinned_poem_id: poemId, pinned_is_free: isFree }).eq("id", session.user.id);
+    setProfile(prev => ({ ...prev, pinned_poem_id: poemId, pinned_is_free: isFree }));
+  };
+
+  const removePinned = async () => {
+    setPinnedPoemId(null);
+    await supabase.from("profiles").update({ pinned_poem_id: null }).eq("id", session.user.id);
+    setProfile(prev => ({ ...prev, pinned_poem_id: null }));
+  };
 
   const openFollowPanel = async (type) => {
     setShowFollowers(type);
@@ -2108,15 +2145,72 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
 
         {/* Avatar — overlaps banner */}
         <div className="absolute left-6 sm:left-8" style={{ bottom: -48 }}>
-          <div className="relative">
+          <div className="relative" style={{ width: 120, height: 120 }}>
             {profile.avatar_url ? (
-              <img src={profile.avatar_url} alt={profile.username}
-                className="rounded-full object-cover"
-                style={{ width: 120, height: 120, border: "4px solid #0F0E18", boxShadow: `0 0 0 2px ${colorFromString(profile.username)}88` }}
-              />
+              <div
+                ref={avatarDragRef}
+                className="rounded-full overflow-hidden"
+                style={{
+                  width: 120, height: 120,
+                  border: "4px solid #0F0E18",
+                  boxShadow: `0 0 0 2px ${colorFromString(profile.username)}88`,
+                  cursor: editing ? "grab" : "default",
+                  position: "relative",
+                }}
+                onMouseDown={editing ? (e) => {
+                  avatarDragStart.current = { mx: e.clientX, my: e.clientY, ox: avatarPosition.x, oy: avatarPosition.y };
+                  const onMove = (ev) => {
+                    const dx = (ev.clientX - avatarDragStart.current.mx) / (120 * avatarZoom) * 100;
+                    const dy = (ev.clientY - avatarDragStart.current.my) / (120 * avatarZoom) * 100;
+                    setAvatarPosition({
+                      x: Math.max(0, Math.min(100, avatarDragStart.current.ox - dx)),
+                      y: Math.max(0, Math.min(100, avatarDragStart.current.oy - dy)),
+                    });
+                  };
+                  const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                  window.addEventListener("mousemove", onMove);
+                  window.addEventListener("mouseup", onUp);
+                } : undefined}
+                onWheel={editing ? (e) => {
+                  e.preventDefault();
+                  setAvatarZoom(z => Math.max(1, Math.min(3, z - e.deltaY * 0.005)));
+                } : undefined}
+              >
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.username}
+                  draggable={false}
+                  style={{
+                    width: `${avatarZoom * 100}%`,
+                    height: `${avatarZoom * 100}%`,
+                    position: "absolute",
+                    top: `${(1 - avatarZoom) * avatarPosition.y}%`,
+                    left: `${(1 - avatarZoom) * avatarPosition.x}%`,
+                    objectFit: "cover",
+                    pointerEvents: "none",
+                    userSelect: "none",
+                  }}
+                />
+                {editing && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1"
+                    style={{ background: "rgba(0,0,0,0.3)", borderRadius: "50%", pointerEvents: "none" }}>
+                    <span className="font-mono text-[8px] text-white opacity-80">glisse · scroll</span>
+                  </div>
+                )}
+              </div>
             ) : (
               <div style={{ border: "4px solid #0F0E18", borderRadius: "50%", display: "inline-block", boxShadow: `0 0 0 2px ${colorFromString(profile.username)}88` }}>
                 <WaxSeal letter={profile.username.charAt(0).toUpperCase()} color={colorFromString(profile.username)} size={120} />
+              </div>
+            )}
+            {/* Zoom slider in edit mode */}
+            {editing && profile.avatar_url && (
+              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1" style={{ width: 100 }}>
+                <span className="font-mono text-[9px]" style={{ color: "var(--ink-light)" }}>−</span>
+                <input type="range" min="1" max="3" step="0.05" value={avatarZoom}
+                  onChange={e => setAvatarZoom(parseFloat(e.target.value))}
+                  className="flex-1" style={{ height: 2, accentColor: "var(--wine)" }} />
+                <span className="font-mono text-[9px]" style={{ color: "var(--ink-light)" }}>+</span>
               </div>
             )}
           </div>
@@ -2124,7 +2218,7 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
       </div>
 
       {/* Info row */}
-      <div className="px-6 sm:px-8 pt-16 pb-6 border-b" style={{ borderColor: "var(--rule)" }}>
+      <div className="px-6 sm:px-8 border-b" style={{ paddingTop: editing ? 80 : 64, paddingBottom: 24, borderColor: "var(--rule)" }}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-3 flex-wrap mb-1">
@@ -2644,8 +2738,22 @@ function AuthorView({ authorId, session, collections, freePoems, openCollection,
         {/* Avatar overlaps banner */}
         <div className="absolute left-6 sm:left-8" style={{ bottom: -48 }}>
           {authorProfile.avatar_url ? (
-            <img src={authorProfile.avatar_url} alt={authorProfile.username} className="rounded-full object-cover"
-              style={{ width: 120, height: 120, border: "4px solid #0F0E18", boxShadow: `0 0 0 2px ${sc}88` }} />
+            <div className="rounded-full overflow-hidden"
+              style={{ width: 120, height: 120, border: "4px solid #0F0E18", boxShadow: `0 0 0 2px ${sc}88`, position: "relative" }}>
+              <img
+                src={authorProfile.avatar_url}
+                alt={authorProfile.username}
+                draggable={false}
+                style={{
+                  width: `${(authorProfile.avatar_zoom ?? 1) * 100}%`,
+                  height: `${(authorProfile.avatar_zoom ?? 1) * 100}%`,
+                  position: "absolute",
+                  top: `${(1 - (authorProfile.avatar_zoom ?? 1)) * (authorProfile.avatar_y ?? 50)}%`,
+                  left: `${(1 - (authorProfile.avatar_zoom ?? 1)) * (authorProfile.avatar_x ?? 50)}%`,
+                  objectFit: "cover",
+                }}
+              />
+            </div>
           ) : (
             <div style={{ border: "4px solid #0F0E18", borderRadius: "50%", display: "inline-block", boxShadow: `0 0 0 2px ${sc}88` }}>
               <WaxSeal letter={authorProfile.username.charAt(0).toUpperCase()} color={sc} size={120} />
