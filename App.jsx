@@ -2367,7 +2367,7 @@ function ProfileView({ collections, draftPoems, freePoems, openCollection, openF
           {/* Pinned poem card */}
           {pinnedPoem && (() => {
             const col = pinnedPoem.collection;
-            const bgImg = col?.cover_url || null;
+            const bgImg = col?.cover_url || pinnedPoem.cover_url || null;
             const sc = col ? (col.sealColor || colorFromString(col.title)) : colorFromString(pinnedPoem.title);
             const preview = (pinnedPoem.lines || []).filter(l => l.trim()).slice(0, 4);
             return (
